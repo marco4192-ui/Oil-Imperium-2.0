@@ -286,18 +286,52 @@ func _on_newspaper_menu_selected(id):
 # --- UPGRADES ---
 func check_upgrade_status():
         if btn_upgrade:
-                if GameManager.check_tech_availability():
-                        btn_upgrade.visible = true
-                        btn_upgrade.modulate = Color(0, 1, 0) # Leuchtet grün
+                # Use era_manager for upgrade check
+                if GameManager.era_manager:
+                        var upgrade_check = GameManager.era_manager.can_upgrade_era()
+                        if upgrade_check["can_upgrade"]:
+                                btn_upgrade.visible = true
+                                btn_upgrade.modulate = Color(0, 1, 0)  # Green - upgrade available
+                        else:
+                                # Show button if year is right but money is missing
+                                var year = GameManager.date["year"]
+                                var current_era = GameManager.current_era
+                                if current_era == 0 and year >= 1982:
+                                        btn_upgrade.visible = true
+                                        btn_upgrade.modulate = Color(1, 0.5, 0)  # Orange - need money
+                                elif current_era == 1 and year >= 1995:
+                                        btn_upgrade.visible = true
+                                        btn_upgrade.modulate = Color(1, 0.5, 0)  # Orange - need money
+                                else:
+                                        btn_upgrade.visible = false
                 else:
-                        btn_upgrade.visible = false
+                        # Fallback to old system
+                        if GameManager.check_tech_availability():
+                                btn_upgrade.visible = true
+                                btn_upgrade.modulate = Color(0, 1, 0)
+                        else:
+                                btn_upgrade.visible = false
 
 func _on_btn_upgrade_pressed():
-        if GameManager.upgrade_era():
-                FeedbackOverlay.show_msg("Büro & Technik aufgerüstet!", Color.GREEN)
-                load_office_style()
+        # Use era_manager for upgrade
+        if GameManager.era_manager:
+                var upgrade_check = GameManager.era_manager.can_upgrade_era()
+                if upgrade_check["can_upgrade"]:
+                        if GameManager.era_manager.perform_era_upgrade():
+                                var era_name = GameManager.era_manager.get_era_name()
+                                FeedbackOverlay.show_msg("ÄRA UPGRADE!\n" + era_name, Color.GREEN)
+                                load_office_style()
+                                return
+                # Show why upgrade failed
+                FeedbackOverlay.show_msg(upgrade_check["reason"], Color.RED)
         else:
-                FeedbackOverlay.show_msg("Nicht genug Geld oder Jahr noch nicht erreicht.")
+                # Fallback to old system
+                if GameManager.upgrade_era():
+                        FeedbackOverlay.show_msg("Büro & Technik aufgerüstet!", Color.GREEN)
+                        load_office_style()
+                else:
+                        FeedbackOverlay.show_msg("Nicht genug Geld oder Jahr noch nicht erreicht.")
+
 
 # ==============================================================================
 # --- SABOTAGE SYSTEM (WIZARD, NEUTRAL START, BIG FONT) ---

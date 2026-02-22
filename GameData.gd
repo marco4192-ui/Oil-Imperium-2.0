@@ -45,26 +45,201 @@ const FACILITIES_TEMPLATE = {
 }
 
 const TECH_DATABASE = {
-        "tech_seismic_2d": { "name": "2D Seismik", "desc": "Bodenscans.", "research_cost": 50000, "hardware_cost": 100000, "research_time": 30, "year": 1972, "facility_req": "lab", "effect": "survey_accuracy_small", "req_tech": [] },
-        "tech_seismic_3d": { "name": "3D Seismik", "desc": "3D Modelle.", "research_cost": 250000, "hardware_cost": 500000, "research_time": 90, "year": 1980, "facility_req": "lab", "effect": "survey_accuracy_medium", "req_tech": ["tech_seismic_2d"] },
-        "tech_satellite": { "name": "Satelliten-Scan", "desc": "Hightech Scan.", "research_cost": 1500000, "hardware_cost": 3000000, "research_time": 180, "year": 1990, "facility_req": "lab", "effect": "survey_accuracy_high", "req_tech": ["tech_seismic_3d"] },
-        "tech_diamond_bits": { "name": "Diamant-Bohrkronen", "desc": "Schneller bohren.", "research_cost": 40000, "hardware_cost": 60000, "research_time": 45, "year": 1973, "facility_req": "drill_ground", "effect": "drill_speed_small", "req_tech": [] },
-        "tech_top_drive": { "name": "Top-Drive", "desc": "Effizienter Antrieb.", "research_cost": 150000, "hardware_cost": 300000, "research_time": 60, "year": 1982, "facility_req": "drill_ground", "effect": "drill_speed_medium", "req_tech": ["tech_diamond_bits"] },
-        "tech_gas_lift": { "name": "Gas-Lift", "desc": "+10% Förderung.", "research_cost": 80000, "hardware_cost": 150000, "research_time": 60, "year": 1976, "facility_req": "workshop", "effect": "production_boost_small", "req_tech": [] },
-        "tech_blowout_preventer": { "name": "Blowout Preventer", "desc": "Mehr Sicherheit.", "research_cost": 120000, "hardware_cost": 200000, "research_time": 50, "year": 1975, "facility_req": "workshop", "effect": "safety_boost", "req_tech": [] },
-        "tech_esp_pumps": { "name": "ESP Pumpen", "desc": "+25% Förderung.", "research_cost": 500000, "hardware_cost": 800000, "research_time": 120, "year": 1982, "facility_req": "workshop", "effect": "production_boost_medium", "req_tech": ["tech_gas_lift"] },
-        "tech_fracking": { "name": "Fracking", "desc": "Massiver Boost.", "research_cost": 5000000, "hardware_cost": 10000000, "research_time": 360, "year": 1998, "facility_req": "workshop", "effect": "production_boost_high", "req_tech": ["tech_esp_pumps"] },
-        "tech_winterization": { "name": "Kälteschutz", "desc": "Erlaubt Eis-Regionen.", "research_cost": 300000, "hardware_cost": 100000, "research_time": 120, "year": 1975, "facility_req": "test_site", "effect": "unlock_biome_ice", "req_tech": [] },
-        "tech_deepwater": { "name": "Tiefsee-Technik", "desc": "Erlaubt Tiefsee.", "research_cost": 1000000, "hardware_cost": 2000000, "research_time": 180, "year": 1985, "facility_req": "test_site", "effect": "unlock_biome_deepsea", "req_tech": [] }
+        # 1970s Tech (Era 0) - Available early, lower costs
+        "tech_seismic_2d": { 
+                "name": "2D Seismik", 
+                "desc": "Bodenscans.", 
+                "research_cost": 50000, 
+                "hardware_cost": 100000, 
+                "research_time": 30, 
+                "year": 1972, 
+                "facility_req": "lab", 
+                "effect": "survey_accuracy_small", 
+                "req_tech": [],
+                "min_era": 0,  # Available from start
+                "icon": "res://assets/icons/tech_seismic.png"
+        },
+        "tech_diamond_bits": { 
+                "name": "Diamant-Bohrkronen", 
+                "desc": "Schneller bohren.", 
+                "research_cost": 40000, 
+                "hardware_cost": 60000, 
+                "research_time": 45, 
+                "year": 1973, 
+                "facility_req": "drill_ground", 
+                "effect": "drill_speed_small", 
+                "req_tech": [],
+                "min_era": 0,
+                "icon": "res://assets/icons/tech_drill.png"
+        },
+        "tech_gas_lift": { 
+                "name": "Gas-Lift", 
+                "desc": "+10% Förderung.", 
+                "research_cost": 80000, 
+                "hardware_cost": 150000, 
+                "research_time": 60, 
+                "year": 1976, 
+                "facility_req": "workshop", 
+                "effect": "production_boost_small", 
+                "req_tech": [],
+                "min_era": 0,
+                "icon": "res://assets/icons/tech_pump.png"
+        },
+        "tech_blowout_preventer": { 
+                "name": "Blowout Preventer", 
+                "desc": "Mehr Sicherheit.", 
+                "research_cost": 120000, 
+                "hardware_cost": 200000, 
+                "research_time": 50, 
+                "year": 1975, 
+                "facility_req": "workshop", 
+                "effect": "safety_boost", 
+                "req_tech": [],
+                "min_era": 0,
+                "icon": "res://assets/icons/tech_safety.png"
+        },
+        "tech_winterization": { 
+                "name": "Kälteschutz", 
+                "desc": "Erlaubt Eis-Regionen.", 
+                "research_cost": 300000, 
+                "hardware_cost": 100000, 
+                "research_time": 120, 
+                "year": 1975, 
+                "facility_req": "test_site", 
+                "effect": "unlock_biome_ice", 
+                "req_tech": [],
+                "min_era": 0,
+                "icon": "res://assets/icons/tech_cold.png"
+        },
+        
+        # 1980s Tech (Era 1) - More expensive, need era upgrade
+        "tech_seismic_3d": { 
+                "name": "3D Seismik", 
+                "desc": "3D Modelle.", 
+                "research_cost": 250000, 
+                "hardware_cost": 500000, 
+                "research_time": 90, 
+                "year": 1980, 
+                "facility_req": "lab", 
+                "effect": "survey_accuracy_medium", 
+                "req_tech": ["tech_seismic_2d"],
+                "min_era": 1,  # Requires 1980s era
+                "icon": "res://assets/icons/tech_seismic3d.png"
+        },
+        "tech_top_drive": { 
+                "name": "Top-Drive", 
+                "desc": "Effizienter Antrieb.", 
+                "research_cost": 150000, 
+                "hardware_cost": 300000, 
+                "research_time": 60, 
+                "year": 1982, 
+                "facility_req": "drill_ground", 
+                "effect": "drill_speed_medium", 
+                "req_tech": ["tech_diamond_bits"],
+                "min_era": 1,
+                "icon": "res://assets/icons/tech_topdrive.png"
+        },
+        "tech_esp_pumps": { 
+                "name": "ESP Pumpen", 
+                "desc": "+25% Förderung.", 
+                "research_cost": 500000, 
+                "hardware_cost": 800000, 
+                "research_time": 120, 
+                "year": 1982, 
+                "facility_req": "workshop", 
+                "effect": "production_boost_medium", 
+                "req_tech": ["tech_gas_lift"],
+                "min_era": 1,
+                "icon": "res://assets/icons/tech_esp.png"
+        },
+        "tech_deepwater": { 
+                "name": "Tiefsee-Technik", 
+                "desc": "Erlaubt Tiefsee.", 
+                "research_cost": 1000000, 
+                "hardware_cost": 2000000, 
+                "research_time": 180, 
+                "year": 1985, 
+                "facility_req": "test_site", 
+                "effect": "unlock_biome_deepsea", 
+                "req_tech": [],
+                "min_era": 1,
+                "icon": "res://assets/icons/tech_deepwater.png"
+        },
+        
+        # 1990s+ Tech (Era 2) - Very expensive, high-end tech
+        "tech_satellite": { 
+                "name": "Satelliten-Scan", 
+                "desc": "Hightech Scan.", 
+                "research_cost": 1500000, 
+                "hardware_cost": 3000000, 
+                "research_time": 180, 
+                "year": 1990, 
+                "facility_req": "lab", 
+                "effect": "survey_accuracy_high", 
+                "req_tech": ["tech_seismic_3d"],
+                "min_era": 2,  # Requires 1990s era
+                "icon": "res://assets/icons/tech_satellite.png"
+        },
+        "tech_fracking": { 
+                "name": "Fracking", 
+                "desc": "Massiver Boost.", 
+                "research_cost": 5000000, 
+                "hardware_cost": 10000000, 
+                "research_time": 360, 
+                "year": 1998, 
+                "facility_req": "workshop", 
+                "effect": "production_boost_high", 
+                "req_tech": ["tech_esp_pumps"],
+                "min_era": 2,
+                "icon": "res://assets/icons/tech_fracking.png"
+        }
 }
 
 const ERA_COLORS = { 
         0: { "bg": Color(0, 0, 0), "text": Color("33ff00"), "button": Color(0.1, 0.1, 0.1) }, 
-        1: { "bg": Color(0, 0, 0.6), "text": Color(1, 1, 1), "button": Color(0.4, 0.4, 0.8) }, 
-        2: { "bg": Color(0.8, 0.8, 0.8), "text": Color(0, 0, 0), "button": Color(0.7, 0.7, 0.7) } 
+        1: { "bg": Color(0.05, 0.05, 0.2), "text": Color(0.4, 0.8, 1.0), "button": Color(0.2, 0.2, 0.5) }, 
+        2: { "bg": Color(0.1, 0.1, 0.15), "text": Color(1, 1, 1), "button": Color(0.3, 0.3, 0.4) } 
 }
 
-const ERA_UPGRADE_COST = { 1: 5000000, 2: 15000000 }
+# Era upgrade costs - VERY expensive, player needs to save money!
+# Era 0->1 (1970s to 1980s): $7.5 million
+# Era 1->2 (1980s to 1990s): $25 million
+const ERA_UPGRADE_COST = { 
+        1: 7500000,   # 1970s -> 1980s: Computer system upgrade
+        2: 25000000   # 1980s -> 1990s: High-tech modernization
+}
+
+# Era-specific tech tree styling
+const ERA_TECH_STYLES = {
+        0: {  # 1970s: Text-only, no icons
+                "style": "text",
+                "icon_visible": false,
+                "columns": 1,
+                "description": "Textbasierte Anzeige",
+                "border_style": "none"
+        },
+        1: {  # 1980s: Basic graphics with simple icons
+                "style": "basic_graphical",
+                "icon_visible": true,
+                "columns": 2,
+                "description": "Einfache Grafik",
+                "border_style": "simple"
+        },
+        2: {  # 1990s+: Modern GUI with full graphics
+                "style": "modern_graphical",
+                "icon_visible": true,
+                "columns": 3,
+                "description": "Moderne GUI",
+                "border_style": "rounded"
+        }
+}
+
+# Tech costs increase by era (later = more expensive)
+const ERA_TECH_COST_MULTIPLIERS = {
+        0: 1.0,   # 1970s: Base cost
+        1: 2.5,   # 1980s: 2.5x more expensive
+        2: 5.0    # 1990s+: 5x more expensive (need to save!)
+}
 
 # --- NEU: FIRMEN POOL (für KI Gegner) ---
 const COMPANIES = [

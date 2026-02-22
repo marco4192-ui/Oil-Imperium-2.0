@@ -6,11 +6,13 @@ const GameEvents = preload("res://GameEvents.gd")
 const ContractManager = preload("res://ContractManager.gd")
 const SabotageManager = preload("res://SabotageManager.gd")
 const TutorialManager = preload("res://TutorialManager.gd")
+const EraManager = preload("res://EraManager.gd")
 
 var events_manager = null
 var contracts_manager = null
 var sabotage_manager = null
 var tutorial_manager = null
+var era_manager = null
 
 # --- SIGNALE ---
 signal data_updated 
@@ -175,6 +177,11 @@ func _ready():
         add_child(tutorial_manager)
         tutorial_manager.game_manager = self
         
+        # Era Manager (handles decade-based evolution)
+        era_manager = EraManager.new()
+        add_child(era_manager)
+        era_manager.game_manager = self
+        
         # Connect tutorial trigger signal
         tutorial_trigger.connect(_on_tutorial_trigger)
         
@@ -330,6 +337,9 @@ func start_new_game(p_name: String, c_name: String, c_logo_path: String, office_
         cash = 5000000.0 
         date = {"day": 1, "month": 1, "year": 1970}
         
+        # Reset era to 1970s
+        current_era = 0
+        
         history_cash.clear()
         history_profit.clear()
         history_revenue.clear()
@@ -354,6 +364,10 @@ func start_new_game(p_name: String, c_name: String, c_logo_path: String, office_
         
         if contracts_manager:
                 contracts_manager.generate_new_contract_offers(self)
+        
+        # Trigger tutorial welcome if enabled
+        if tutorial_manager and tutorial_manager.tutorial_enabled:
+                tutorial_trigger.emit("game_start")
         
         get_tree().change_scene_to_file("res://Office.tscn")
 
@@ -666,22 +680,41 @@ func build_facility(fid):
 
 func start_research(tid):
         var tech = tech_database[tid]
-        var cost = tech["research_cost"] * inflation_rate
+        
+        # Check era requirement (min_era)
+        var min_era = tech.get("min_era", 0)
+        if current_era < min_era:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("TECHNOLOGIE ZU FORTGESCHRITTEN!\nBenötigt Ära-Upgrade!", Color.RED)
+                return false
+        
+        # Apply era-based cost multiplier (later eras = more expensive)
+        var era_multiplier = GameData.ERA_TECH_COST_MULTIPLIERS.get(current_era, 1.0)
+        var cost = tech["research_cost"] * inflation_rate * era_multiplier
+        
         if cash >= cost:
                 current_research_id = tid
                 current_research_days_left = tech["research_time"]
                 book_transaction("Global", -cost, "R&D")
                 notify_update()
+                return true
+        return false
 
 func buy_tech_hardware(tid):
         var tech = tech_database[tid]
-        var cost = tech["hardware_cost"] * inflation_rate
+        
+        # Apply era-based cost multiplier
+        var era_multiplier = GameData.ERA_TECH_COST_MULTIPLIERS.get(current_era, 1.0)
+        var cost = tech["hardware_cost"] * inflation_rate * era_multiplier
+        
         if cash >= cost:
                 unlocked_techs.append(tid)
                 apply_tech_effect(tech["effect"])
                 tech_activated.emit(tid)
                 book_transaction("Global", -cost, "Upgrades")
                 notify_update()
+                return true
+        return false
 
 # --- SABOTAGE ---
 func player_order_sabotage(type, region):
