@@ -207,7 +207,7 @@ func _create_activity_entry(activity: Dictionary) -> PanelContainer:
 
 func _get_type_icon(type: int) -> String:
         match type:
-                0: return "[\$]"  # AI_PURCHASE
+                0: return "[$]"  # AI_PURCHASE
                 1: return "[!]"  # AI_SABOTAGE
                 2: return "[L]"  # AI_LICENSE
                 3: return "[+]"  # AI_EXPANSION
