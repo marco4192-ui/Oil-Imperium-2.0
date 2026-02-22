@@ -5,10 +5,12 @@ const GameData = preload("res://GameData.gd")
 const GameEvents = preload("res://GameEvents.gd")
 const ContractManager = preload("res://ContractManager.gd")
 const SabotageManager = preload("res://SabotageManager.gd")
+const TutorialManager = preload("res://TutorialManager.gd")
 
 var events_manager = null
 var contracts_manager = null
 var sabotage_manager = null
+var tutorial_manager = null
 
 # --- SIGNALE ---
 signal data_updated 
@@ -19,6 +21,9 @@ signal contract_signed(type, info)
 signal contract_failed(type, penalty)
 signal contract_fulfilled(type, reward)
 signal phone_ringing_changed(is_ringing) 
+
+# --- TUTORIAL TRIGGER HELPER ---
+signal tutorial_trigger(trigger_name: String)
 
 # --- KONSTANTEN (WIRTSCHAFT 1970er) ---
 const DAYS_PER_MONTH = 30
@@ -165,6 +170,14 @@ func _ready():
         sabotage_manager = SabotageManager.new() 
         add_child(sabotage_manager)
         
+        # Tutorial Manager
+        tutorial_manager = TutorialManager.new()
+        add_child(tutorial_manager)
+        tutorial_manager.game_manager = self
+        
+        # Connect tutorial trigger signal
+        tutorial_trigger.connect(_on_tutorial_trigger)
+        
         record_history()
         generate_claims()
         contracts_manager.generate_new_contract_offers(self)
@@ -172,6 +185,10 @@ func _ready():
         ai_controller = ai_controller_script.new()
         add_child(ai_controller) 
         ai_controller.game_manager = self
+
+func _on_tutorial_trigger(trigger_name: String):
+        if tutorial_manager:
+                tutorial_manager.check_trigger(trigger_name)
         
 func _load_static_data():
         office_data = GameData.OFFICE_DATA
@@ -1059,26 +1076,89 @@ func generate_claims():
                                                 id += 1 # ID nur für echte Felder erhöhen
 
 func get_survey_result(region_name, claim):
-        if claim == null or typeof(claim) != TYPE_DICTIONARY: return {"yield":0, "reserves":0}
+        if claim == null or typeof(claim) != TYPE_DICTIONARY: return {"yield":0, "reserves":0, "quality":"UNKNOWN", "confidence":0}
         
-        var r=randf()*100.0; var dev=0.0
-        if r<5.0: dev=2.0; if randf()<0.5: dev=-0.9
-        elif r<15.0: dev=0.5
-        elif r<35.0: dev=0.3
-        elif r<65.0: dev=0.2
-        else: dev=0.1
-        if randf()<0.5: dev*=-1.0
-        dev = dev * (1.0 - tech_bonus_survey_accuracy)
+        # Base deviation depends on tech level (better tech = more accurate, but NEVER perfect)
+        var base_accuracy = 0.3  # 30% base inaccuracy even with best tech
+        if tech_bonus_survey_accuracy >= 0.8:
+                base_accuracy = 0.15  # Best tech still has 15% variance
+        elif tech_bonus_survey_accuracy >= 0.4:
+                base_accuracy = 0.25
+        elif tech_bonus_survey_accuracy >= 0.2:
+                base_accuracy = 0.35
         
-        var ry = claim.get("yield", 0.0)
-        var rr = claim.get("reserves_remaining", 0.0)
-        if not claim.get("has_oil", false): ry=20.0; rr=50000.0
+        # Determine deviation direction and magnitude
+        var roll = randf()
+        var deviation = 0.0
+        var quality_text = "MODERATE"
+        var confidence = 50
         
-        var ey=max(0, ry*(1.0+dev)); var er=max(0, rr*(1.0+dev))
-        claim["surveyed"]=true; claim["survey_yield"]=ey; claim["survey_reserves"]=er
+        # Critical failure: 5% chance of wildly wrong results
+        if roll < 0.05:
+                # Catastrophic misread - show opposite of reality
+                deviation = randf_range(1.5, 3.0)  # 150-300% off
+                if randf() < 0.5: deviation = -deviation
+                quality_text = "UNRELIABLE"
+                confidence = randi_range(10, 30)
+        # Major variance: 15% chance
+        elif roll < 0.20:
+                deviation = randf_range(0.5, 1.0) * (1 if randf() < 0.5 else -1)
+                quality_text = "LOW"
+                confidence = randi_range(25, 45)
+        # Moderate variance: 35% chance  
+        elif roll < 0.55:
+                deviation = randf_range(0.25, 0.5) * (1 if randf() < 0.5 else -1)
+                quality_text = "MODERATE"
+                confidence = randi_range(45, 65)
+        # Minor variance: 30% chance
+        elif roll < 0.85:
+                deviation = randf_range(0.1, 0.25) * (1 if randf() < 0.5 else -1)
+                quality_text = "GOOD"
+                confidence = randi_range(65, 80)
+        # Best case: 15% chance - still never perfect!
+        else:
+                deviation = randf_range(0.05, 0.15) * (1 if randf() < 0.5 else -1)
+                quality_text = "HIGH"
+                confidence = randi_range(75, 90)
+        
+        # Apply tech bonus (reduces but never eliminates inaccuracy)
+        deviation *= (1.0 - tech_bonus_survey_accuracy * 0.5)
+        
+        # Get actual values
+        var actual_yield = claim.get("yield", 0.0)
+        var actual_reserves = claim.get("reserves_remaining", 0.0)
+        
+        # For dry holes, still show some "false positive" potential
+        if not claim.get("has_oil", false):
+                # Even dry holes might show "trace amounts" or "minor reserves"
+                actual_yield = randf_range(10.0, 100.0)  # Show some potential
+                actual_reserves = randf_range(10000.0, 50000.0)
+        
+        # Calculate estimated values (always wrong to some degree)
+        var estimated_yield = max(0, actual_yield * (1.0 + deviation))
+        var estimated_reserves = max(0, actual_reserves * (1.0 + deviation))
+        
+        # Add random noise to ensure values are never exactly right
+        estimated_yield *= randf_range(0.95, 1.05)
+        estimated_reserves *= randf_range(0.95, 1.05)
+        
+        # Store survey data
+        claim["surveyed"] = true
+        claim["survey_yield"] = estimated_yield
+        claim["survey_reserves"] = estimated_reserves
+        claim["survey_quality"] = quality_text
+        claim["survey_confidence"] = confidence
+        
+        # Book cost
         var cost = get_survey_cost(region_name, claim.get("is_offshore", false))
         book_transaction("Global", -cost, "Services") 
-        return {"yield":ey, "reserves":er}
+        
+        return {
+                "yield": estimated_yield, 
+                "reserves": estimated_reserves, 
+                "quality": quality_text,
+                "confidence": confidence
+        }
 
 # --- FIX: ROBUSTE CLAIM SUCHE & VERKAUF ---
 

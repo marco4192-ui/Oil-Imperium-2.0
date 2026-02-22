@@ -17,6 +17,9 @@ extends Control
 # Save-Menu UI
 var save_popup: PopupMenu
 
+# Tutorial-Menu UI
+var tutorial_popup: PopupMenu
+
 # --- NEUES SABOTAGE UI (CANVAS LAYER) ---
 var sabotage_layer: CanvasLayer
 var sabotage_panel: Panel
@@ -36,6 +39,7 @@ var tooltip_label: Label
 func _ready():
         load_office_style()
         create_save_popup()
+        create_tutorial_popup()
         create_sabotage_ui() 
         setup_tooltips()
         
@@ -50,6 +54,10 @@ func _ready():
                 
         if not GameManager.tech_activated.is_connected(check_upgrade_status):
                 GameManager.tech_activated.connect(check_upgrade_status)
+        
+        # Trigger tutorial for office entry
+        if GameManager.tutorial_manager and GameManager.tutorial_manager.tutorial_enabled:
+                GameManager.tutorial_trigger.emit("office_enter")
                 
         # Initial Update
         update_ui()
@@ -163,6 +171,51 @@ func _on_save_slot_selected(id):
 func _on_save_item_pressed(id):
         GameManager.save_game(str(id))
 
+# --- TUTORIAL ---
+func create_tutorial_popup():
+        tutorial_popup = PopupMenu.new()
+        tutorial_popup.name = "TutorialMenu"
+        add_child(tutorial_popup)
+        
+        tutorial_popup.add_item("Tutorial aktivieren", 1)
+        tutorial_popup.add_item("Tutorial deaktivieren", 2)
+        tutorial_popup.add_item("Tutorial zurücksetzen", 3)
+        
+        if not tutorial_popup.id_pressed.is_connected(_on_tutorial_menu_selected):
+                tutorial_popup.id_pressed.connect(_on_tutorial_menu_selected)
+        
+        # Update menu items based on current state
+        _update_tutorial_menu()
+
+func _update_tutorial_menu():
+        if tutorial_popup == null: return
+        if GameManager.tutorial_manager and GameManager.tutorial_manager.tutorial_enabled:
+                tutorial_popup.set_item_text(0, "✓ Tutorial aktiviert")
+                tutorial_popup.set_item_disabled(0, true)
+                tutorial_popup.set_item_text(1, "Tutorial deaktivieren")
+                tutorial_popup.set_item_disabled(1, false)
+        else:
+                tutorial_popup.set_item_text(0, "Tutorial aktivieren")
+                tutorial_popup.set_item_disabled(0, false)
+                tutorial_popup.set_item_text(1, "✓ Tutorial deaktiviert")
+                tutorial_popup.set_item_disabled(1, true)
+
+func _on_tutorial_menu_selected(id):
+        if GameManager.tutorial_manager == null: return
+        
+        match id:
+                1:  # Enable tutorial
+                        GameManager.tutorial_manager.enable_tutorial()
+                        FeedbackOverlay.show_msg("Tutorial aktiviert! Tipps werden nun angezeigt.", Color.CYAN)
+                2:  # Disable tutorial
+                        GameManager.tutorial_manager.disable_tutorial()
+                        FeedbackOverlay.show_msg("Tutorial deaktiviert.", Color.GRAY)
+                3:  # Reset tutorial
+                        GameManager.tutorial_manager.reset_tutorial()
+                        FeedbackOverlay.show_msg("Tutorial zurückgesetzt. Es beginnt von vorn!", Color.CYAN)
+        
+        _update_tutorial_menu()
+
 # --- BUTTON EVENT HANDLERS ---
 
 # 1. SCHUBLADE -> SABOTAGE
@@ -198,14 +251,37 @@ func check_newspaper_status():
                         btn_newspaper.modulate = Color(1, 1, 1)
 
 func _on_btn_newspaper_pressed():
-        if GameManager.unread_news.is_empty():
-                FeedbackOverlay.show_msg("Keine neuen Nachrichten.")
-        else:
+        if not GameManager.unread_news.is_empty():
                 var news = GameManager.unread_news.pop_front()
                 var txt = "[ " + news.get("title", "INFO") + " ]\n\n" + news.get("text", "")
                 FeedbackOverlay.show_msg(txt, Color.WHITE)
                 GameManager.news_archive.append(news)
                 check_newspaper_status()
+        else:
+                # Show options menu when no news
+                var options_popup = PopupMenu.new()
+                add_child(options_popup)
+                options_popup.add_item("Tutorial-Einstellungen", 1)
+                options_popup.add_item("Archiv anzeigen (" + str(GameManager.news_archive.size()) + " Einträge)", 2)
+                options_popup.id_pressed.connect(_on_newspaper_menu_selected)
+                options_popup.position = Vector2(get_viewport().get_mouse_position())
+                options_popup.popup()
+                await options_popup.popup_hide
+                options_popup.queue_free()
+
+func _on_newspaper_menu_selected(id):
+        match id:
+                1:
+                        tutorial_popup.position = Vector2(get_viewport().get_mouse_position())
+                        tutorial_popup.popup()
+                2:
+                        if GameManager.news_archive.is_empty():
+                                FeedbackOverlay.show_msg("Archiv ist leer.")
+                        else:
+                                var archive_text = "=== NACHRICHTEN-ARCHIV ===\n\n"
+                                for news in GameManager.news_archive:
+                                        archive_text += "[" + news.get("date_str", "?") + "] " + news.get("title", "?") + "\n"
+                                FeedbackOverlay.show_msg(archive_text, Color.WHITE)
 
 # --- UPGRADES ---
 func check_upgrade_status():
