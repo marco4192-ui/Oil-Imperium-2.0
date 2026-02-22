@@ -36,16 +36,65 @@ func create_load_popup():
         load_popup.name = "LoadMenu"
         add_child(load_popup)
         
-        # Existierende Saves prüfen
+        # Existierende Saves prüfen mit Vorschau
         var saves = GameManager.get_existing_saves()
         if saves.is_empty():
                 load_popup.add_item("Keine Spielstände", -1)
                 load_popup.set_item_disabled(0, true)
         else:
                 for s in saves:
-                        load_popup.add_item("Slot " + s, int(s))
+                        # Load save preview data
+                        var preview = _get_save_preview(s)
+                        var label = "Slot " + s + ": " + preview
+                        load_popup.add_item(label, int(s))
                         
         load_popup.id_pressed.connect(_on_load_item_pressed)
+
+func _get_save_preview(slot: String) -> String:
+        var path = GameManager.SAVE_PATH_BASE + slot + ".save"
+        if not FileAccess.file_exists(path):
+                return "Leer"
+        
+        var file = FileAccess.open(path, FileAccess.READ)
+        if not file:
+                return "Fehler"
+        
+        var data = file.get_var()
+        if typeof(data) != TYPE_DICTIONARY:
+                return "Korrupt"
+        
+        # Extract preview info
+        var cash = 0.0
+        var year = 1970
+        var month = 1
+        var company = "Unknown"
+        
+        if data.has("player"):
+                cash = data.player.get("cash", 0.0)
+                company = data.player.get("company", "Unknown")
+        
+        if data.has("date"):
+                year = data.date.get("year", 1970)
+                month = data.date.get("month", 1)
+        
+        # Format cash
+        var cash_str = "$" + _fmt_money(int(cash))
+        
+        # Format date
+        var date_str = "%02d/%d" % [month, year]
+        
+        return "%s | %s | %s" % [company, cash_str, date_str]
+
+func _fmt_money(value: int) -> String:
+        var s = str(value)
+        var res = ""
+        var counter = 0
+        for i in range(s.length() - 1, -1, -1):
+                res = s[i] + res
+                counter += 1
+                if counter % 3 == 0 and i > 0:
+                        res = "." + res
+        return res
 
 func _on_btn_load_pressed():
         # Popup an Position des Buttons öffnen

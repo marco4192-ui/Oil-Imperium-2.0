@@ -150,6 +150,13 @@ func _smart_expansion(bot):
         bot["monthly_budget"] -= price
         
         print(">>> " + bot["name"] + " KAUFT LAND in " + best_region + " für $" + str(price))
+        
+        # Log to activity feed
+        if game_manager and game_manager.activity_feed:
+                game_manager.activity_feed.log_activity(
+                        game_manager.activity_feed.ACTIVITY_TYPE.AI_PURCHASE,
+                        {"company": bot["name"], "region": best_region, "price": price}
+                )
 
 func _evaluate_best_region(bot) -> String:
         var scored_regions = []
@@ -283,4 +290,12 @@ func _strategic_sabotage(bot):
                 chosen_type = sabotage_types[randi() % sabotage_types.size()]
         
         print(">>> " + bot["name"] + " versucht SABOTAGE (" + chosen_type + ") in " + target_region)
+        
+        # Log to activity feed
+        if game_manager and game_manager.activity_feed:
+                game_manager.activity_feed.log_activity(
+                        game_manager.activity_feed.ACTIVITY_TYPE.AI_SABOTAGE,
+                        {"company": bot["name"], "region": target_region, "type": chosen_type}
+                )
+        
         game_manager.ai_perform_sabotage(chosen_type, target_region)

@@ -62,6 +62,74 @@ func _ready():
         # Initial Update
         update_ui()
 
+# --- KEYBOARD SHORTCUTS ---
+func _input(event):
+        if event is InputEventKey and event.pressed:
+                var key = event.keycode
+                
+                # N = Next Day
+                if key == KEY_N:
+                        GameManager.next_day()
+                        accept_event()
+                
+                # M = Map / Regions
+                elif key == KEY_M:
+                        _on_btn_map_pressed()
+                        accept_event()
+                
+                # C = Computer
+                elif key == KEY_C:
+                        _on_btn_computer_pressed()
+                        accept_event()
+                
+                # S = Save
+                elif key == KEY_S:
+                        GameManager.save_game(GameManager.current_save_slot)
+                        accept_event()
+                
+                # E = End Month
+                elif key == KEY_E:
+                        _on_btn_end_month_pressed()
+                        accept_event()
+                
+                # T = Toggle Tutorial
+                elif key == KEY_T:
+                        if GameManager.tutorial_manager:
+                                GameManager.tutorial_manager.toggle_tutorial()
+                        accept_event()
+                
+                # Number keys 1-9 for quick region selection
+                elif key >= KEY_1 and key <= KEY_9:
+                        var region_idx = key - KEY_1
+                        var visible_regions = []
+                        for r_name in GameManager.regions:
+                                if GameManager.regions[r_name].get("visible", false):
+                                        visible_regions.append(r_name)
+                        
+                        if region_idx < visible_regions.size():
+                                GameManager.current_viewing_region = visible_regions[region_idx]
+                                _on_btn_map_pressed()
+                        accept_event()
+                
+                # H = Help (show shortcuts)
+                elif key == KEY_H:
+                        show_help()
+                        accept_event()
+
+func show_help():
+        var help_text = "=== TASTATURKÜRZEL ===\n\n"
+        help_text += "N = Nächster Tag\n"
+        help_text += "M = Karte / Regionen\n"
+        help_text += "C = Computer\n"
+        help_text += "S = Speichern\n"
+        help_text += "E = Monat beenden\n"
+        help_text += "T = Tutorial an/aus\n"
+        help_text += "1-9 = Schnellauswahl Region\n"
+        help_text += "H = Diese Hilfe"
+        
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg(help_text, Color.CYAN)
+
 func load_office_style():
         var office_id = GameManager.current_office_id
         

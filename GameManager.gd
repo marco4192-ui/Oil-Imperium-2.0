@@ -7,12 +7,18 @@ const ContractManager = preload("res://ContractManager.gd")
 const SabotageManager = preload("res://SabotageManager.gd")
 const TutorialManager = preload("res://TutorialManager.gd")
 const EraManager = preload("res://EraManager.gd")
+const ActivityFeed = preload("res://ActivityFeed.gd")
+const AchievementManager = preload("res://AchievementManager.gd")
+const LoanManager = preload("res://LoanManager.gd")
 
 var events_manager = null
 var contracts_manager = null
 var sabotage_manager = null
 var tutorial_manager = null
 var era_manager = null
+var activity_feed = null
+var achievement_manager = null
+var loan_manager = null
 
 # --- SIGNALE ---
 signal data_updated 
@@ -181,6 +187,22 @@ func _ready():
         era_manager = EraManager.new()
         add_child(era_manager)
         era_manager.game_manager = self
+        
+        # Activity Feed (tracks AI and game events)
+        activity_feed = ActivityFeed.new()
+        add_child(activity_feed)
+        activity_feed.game_manager = self
+        
+        # Achievement Manager (tracks player accomplishments)
+        achievement_manager = AchievementManager.new()
+        add_child(achievement_manager)
+        achievement_manager.game_manager = self
+        achievement_manager.activity_feed = activity_feed
+        
+        # Loan Manager (handles borrowing money)
+        loan_manager = LoanManager.new()
+        add_child(loan_manager)
+        loan_manager.game_manager = self
         
         # Connect tutorial trigger signal
         tutorial_trigger.connect(_on_tutorial_trigger)
@@ -565,6 +587,12 @@ func finish_month():
         
         if ai_controller: ai_controller.process_ai_turn()
         
+        # Process loan payments
+        if loan_manager: loan_manager.process_monthly_payments()
+        
+        # Check achievements
+        if achievement_manager: achievement_manager.on_month_end()
+        
         record_history()
         
         date["day"] = 1
@@ -770,7 +798,7 @@ func finish_research():
         notify_update()
 
 # --- SPEICHERSYSTEM ---
-const SAVE_VERSION = 3  # Increment when adding new save data fields
+const SAVE_VERSION = 4  # Increment when adding new save data fields
 
 func save_game(slot_name: String = "1"):
         var path = SAVE_PATH_BASE + slot_name + ".save"
@@ -823,6 +851,12 @@ func save_game(slot_name: String = "1"):
                         "history_revenue": history_revenue,    # NEW: Full history
                         "history_expenses": history_expenses,  # NEW: Full history
                         "history_oil_price": history_oil_price
+                },
+                # New managers data (V4)
+                "managers": {
+                        "activity_feed": activity_feed.get_save_data() if activity_feed else {},
+                        "achievements": achievement_manager.get_save_data() if achievement_manager else {},
+                        "loans": loan_manager.get_save_data() if loan_manager else {}
                 }
         }
         
@@ -917,6 +951,16 @@ func load_game(slot_name: String = "1"):
                 # Ensure arrays are not empty to prevent graph issues
                 if history_cash.is_empty(): history_cash.append(cash)
                 if history_oil_price.is_empty(): history_oil_price.append(oil_price)
+        
+        # V4: Load new manager data
+        if data.has("managers"):
+                var managers_data = data["managers"]
+                if activity_feed and managers_data.has("activity_feed"):
+                        activity_feed.load_save_data(managers_data["activity_feed"])
+                if achievement_manager and managers_data.has("achievements"):
+                        achievement_manager.load_save_data(managers_data["achievements"])
+                if loan_manager and managers_data.has("loans"):
+                        loan_manager.load_save_data(managers_data["loans"])
         
         # Re-initialize AI controller if needed
         if ai_controller and ai_controller.game_manager == null:
