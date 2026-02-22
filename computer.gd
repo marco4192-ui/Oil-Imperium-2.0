@@ -888,3 +888,133 @@ func _get_last_n(array: Array, n: int) -> Array:
         if array.size() <= n:
                 return array.duplicate()
         return array.slice(array.size() - n)
+
+# --- ENHANCED FINANCIAL REPORTS ---
+func _on_btn_financial_report_pressed():
+        var report_panel = preload("res://FinancialReportPanel.gd").new()
+        add_child(report_panel)
+        report_panel.show_report()
+
+# --- ACHIEVEMENTS DISPLAY ---
+func _on_btn_achievements_pressed():
+        var achievement_panel = preload("res://AchievementDisplay.gd").new()
+        add_child(achievement_panel)
+        achievement_panel.show_achievements()
+
+# --- ACTIVITY FEED DISPLAY ---
+func _on_btn_activity_feed_pressed():
+        var feed_panel = preload("res://ActivityFeedDisplay.gd").new()
+        add_child(feed_panel)
+        feed_panel.show_feed()
+
+# --- LOAN MANAGEMENT ---
+func _on_btn_loans_pressed():
+        _show_loan_menu()
+
+func _show_loan_menu():
+        if GameManager.loan_manager == null:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Kreditsystem nicht verfügbar", Color.RED)
+                return
+        
+        var loan_panel = Panel.new()
+        loan_panel.custom_minimum_size = Vector2(600, 450)
+        loan_panel.set_anchors_preset(Control.PRESET_CENTER)
+        add_child(loan_panel)
+        
+        var margin = MarginContainer.new()
+        margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+        margin.add_theme_constant_override("margin_left", 20)
+        margin.add_theme_constant_override("margin_right", 20)
+        margin.add_theme_constant_override("margin_top", 15)
+        margin.add_theme_constant_override("margin_bottom", 15)
+        loan_panel.add_child(margin)
+        
+        var vbox = VBoxContainer.new()
+        vbox.add_theme_constant_override("separation", 10)
+        margin.add_child(vbox)
+        
+        # Header
+        var header = HBoxContainer.new()
+        vbox.add_child(header)
+        
+        var title = Label.new()
+        title.text = "KREDITZENTRALE"
+        title.add_theme_font_size_override("font_size", 24)
+        title.add_theme_color_override("font_color", COL_TERM_MAIN)
+        header.add_child(title)
+        
+        var spacer = Control.new()
+        spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        header.add_child(spacer)
+        
+        var btn_close = Button.new()
+        btn_close.text = "X"
+        btn_close.pressed.connect(func(): loan_panel.queue_free())
+        header.add_child(btn_close)
+        
+        # Credit rating display
+        var rating_box = HBoxContainer.new()
+        vbox.add_child(rating_box)
+        
+        var rating_label = Label.new()
+        rating_label.text = "Kreditrating: " + GameManager.loan_manager.get_credit_rating_text()
+        rating_label.add_theme_color_override("font_color", COL_TERM_MAIN)
+        rating_box.add_child(rating_label)
+        
+        # Debt display
+        var debt_label = Label.new()
+        debt_label.text = " | Gesamtschulden: $" + _fmt_money_str(GameManager.loan_manager.get_total_debt())
+        debt_label.add_theme_color_override("font_color", Color.RED if GameManager.loan_manager.get_total_debt() > 0 else COL_TERM_DIM)
+        rating_box.add_child(debt_label)
+        
+        # Active loans
+        var loans_label = Label.new()
+        loans_label.text = "Aktive Kredite: %d / %d" % [GameManager.loan_manager.active_loans.size(), 3]
+        vbox.add_child(loans_label)
+        
+        # Separator
+        var sep = HSeparator.new()
+        vbox.add_child(sep)
+        
+        # Available loan offers
+        var offers_label = Label.new()
+        offers_label.text = "VERFÜGBARE KREDITE:"
+        offers_label.add_theme_font_size_override("font_size", 16)
+        vbox.add_child(offers_label)
+        
+        var offers = GameManager.loan_manager.get_available_offers()
+        for offer in offers:
+                var offer_hbox = HBoxContainer.new()
+                offer_hbox.add_theme_constant_override("separation", 10)
+                vbox.add_child(offer_hbox)
+                
+                var offer_info = Label.new()
+                offer_info.text = "%s: $%s @ %.1f%% (%d Monate)" % [
+                        offer["name"], _fmt_money_str(offer["principal"]), 
+                        offer["interest_rate"] * 100, offer["duration_months"]
+                ]
+                offer_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                offer_hbox.add_child(offer_info)
+                
+                var btn_take = Button.new()
+                btn_take.text = "AUFNEHMEN"
+                btn_take.disabled = not offer["can_afford"]
+                btn_take.pressed.connect(func(): _take_loan(offer["id"], loan_panel))
+                offer_hbox.add_child(btn_take)
+        
+        # Bankruptcy warning
+        if GameManager.loan_manager.bankruptcy_risk > 0.3:
+                var warning = Label.new()
+                warning.text = "⚠ BANKROTT-RISIKO: " + GameManager.loan_manager.get_bankruptcy_risk_text()
+                warning.add_theme_color_override("font_color", Color.RED)
+                warning.add_theme_font_size_override("font_size", 18)
+                vbox.add_child(warning)
+
+func _take_loan(offer_id: String, panel: Panel):
+        var result = GameManager.loan_manager.take_loan(offer_id)
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg(result["message"], Color.GREEN if result["success"] else Color.RED)
+        if result["success"]:
+                panel.queue_free()
+                _show_loan_menu()

@@ -98,6 +98,26 @@ func _input(event):
                                 GameManager.tutorial_manager.toggle_tutorial()
                         accept_event()
                 
+                # A = Achievements
+                elif key == KEY_A:
+                        _show_achievements()
+                        accept_event()
+                
+                # L = Activity Log
+                elif key == KEY_L:
+                        _show_activity_feed()
+                        accept_event()
+                
+                # F = Financial Report
+                elif key == KEY_F:
+                        _show_financial_report()
+                        accept_event()
+                
+                # $ = Loan Menu
+                elif key == KEY_DOLLAR:
+                        _show_loan_menu()
+                        accept_event()
+                
                 # Number keys 1-9 for quick region selection
                 elif key >= KEY_1 and key <= KEY_9:
                         var region_idx = key - KEY_1
@@ -124,11 +144,105 @@ func show_help():
         help_text += "S = Speichern\n"
         help_text += "E = Monat beenden\n"
         help_text += "T = Tutorial an/aus\n"
+        help_text += "A = Erfolge anzeigen\n"
+        help_text += "L = Aktivitäts-Log\n"
+        help_text += "F = Finanzbericht\n"
+        help_text += "$ = Kredite\n"
         help_text += "1-9 = Schnellauswahl Region\n"
         help_text += "H = Diese Hilfe"
         
         if has_node("/root/FeedbackOverlay"):
                 get_node("/root/FeedbackOverlay").show_msg(help_text, Color.CYAN)
+
+# --- QUICK ACCESS PANELS ---
+func _show_achievements():
+        var achievement_display = preload("res://AchievementDisplay.gd").new()
+        add_child(achievement_display)
+        achievement_display.show_achievements()
+
+func _show_activity_feed():
+        var feed_display = preload("res://ActivityFeedDisplay.gd").new()
+        add_child(feed_display)
+        feed_display.show_feed()
+
+func _show_financial_report():
+        var report_panel = preload("res://FinancialReportPanel.gd").new()
+        add_child(report_panel)
+        report_panel.show_report()
+
+func _show_loan_menu():
+        if GameManager.loan_manager == null:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Kreditsystem nicht verfügbar", Color.RED)
+                return
+        
+        var loan_panel = Panel.new()
+        loan_panel.custom_minimum_size = Vector2(550, 400)
+        loan_panel.set_anchors_preset(Control.PRESET_CENTER)
+        add_child(loan_panel)
+        
+        var margin = MarginContainer.new()
+        margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+        margin.add_theme_constant_override("margin_left", 20)
+        margin.add_theme_constant_override("margin_right", 20)
+        margin.add_theme_constant_override("margin_top", 15)
+        margin.add_theme_constant_override("margin_bottom", 15)
+        loan_panel.add_child(margin)
+        
+        var vbox = VBoxContainer.new()
+        vbox.add_theme_constant_override("separation", 10)
+        margin.add_child(vbox)
+        
+        # Header
+        var header = HBoxContainer.new()
+        vbox.add_child(header)
+        
+        var title = Label.new()
+        title.text = "KREDITZENTRALE"
+        title.add_theme_font_size_override("font_size", 22)
+        header.add_child(title)
+        
+        var spacer = Control.new()
+        spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        header.add_child(spacer)
+        
+        var btn_close = Button.new()
+        btn_close.text = "X"
+        btn_close.pressed.connect(func(): loan_panel.queue_free())
+        header.add_child(btn_close)
+        
+        # Credit info
+        var info = Label.new()
+        info.text = "Rating: " + GameManager.loan_manager.get_credit_rating_text() + " | Schulden: $" + _fmt(GameManager.loan_manager.get_total_debt())
+        vbox.add_child(info)
+        
+        # Separator
+        var sep = HSeparator.new()
+        vbox.add_child(sep)
+        
+        # Offers
+        var offers = GameManager.loan_manager.get_available_offers()
+        for offer in offers:
+                var hbox = HBoxContainer.new()
+                hbox.add_theme_constant_override("separation", 10)
+                vbox.add_child(hbox)
+                
+                var lbl = Label.new()
+                lbl.text = "%s: $%s @ %.1f%%" % [offer["name"], _fmt(offer["principal"]), offer["interest_rate"]*100]
+                lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                hbox.add_child(lbl)
+                
+                var btn = Button.new()
+                btn.text = "AUFNEHMEN"
+                btn.disabled = not offer["can_afford"]
+                btn.pressed.connect(func(): 
+                        var result = GameManager.loan_manager.take_loan(offer["id"])
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg(result["message"], Color.GREEN if result["success"] else Color.RED)
+                        if result["success"]:
+                                loan_panel.queue_free()
+                )
+                hbox.add_child(btn)
 
 func load_office_style():
         var office_id = GameManager.current_office_id
