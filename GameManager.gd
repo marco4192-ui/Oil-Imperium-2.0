@@ -141,6 +141,10 @@ var available_future_offers: Array:
 var phone_ringing = false
 var pending_sabotage_reports = [] 
 
+# --- OIL FIELD FIRE EVENTS ---
+var pending_fire_event: Dictionary = {}
+var show_fire_options: bool = false 
+
 # --- REGIONEN ---
 var current_viewing_region = "Texas"
 var active_region_name = "" 
@@ -495,6 +499,12 @@ func process_day_simulation():
                                 
                                 if claim.get("has_oil", false) and claim.get("reserves_remaining", 0) > 0:
                                         var extracted_amount = claim["yield"] * randf_range(0.95, 1.05) * tech_bonus_production
+                                        
+                                        # Apply fire damage reduction if present
+                                        var fire_damage = claim.get("fire_damage", 0)
+                                        if fire_damage > 0:
+                                                extracted_amount *= (1.0 - fire_damage / 100.0)
+                                        
                                         extracted_amount = min(extracted_amount, claim["reserves_remaining"])
                                         region_prod += extracted_amount
                                         claim["reserves_remaining"] -= extracted_amount
@@ -592,6 +602,9 @@ func finish_month():
         
         # Check achievements
         if achievement_manager: achievement_manager.on_month_end()
+        
+        # Process fire damage recovery
+        process_fire_recovery()
         
         record_history()
         
@@ -767,6 +780,108 @@ func answer_phone():
         var rep = pending_sabotage_reports.pop_front()
         if pending_sabotage_reports.is_empty(): phone_ringing = false; phone_ringing_changed.emit(false)
         return rep
+
+# --- OIL FIELD FIRE HANDLING ---
+const TED_REDHAIR_COST: int = 500000
+
+func start_firefighter_minigame():
+        if pending_fire_event.is_empty():
+                return false
+        
+        # Store fire data for callback
+        var fire_data = pending_fire_event.duplicate()
+        
+        # Advance time by 1 month (cost of playing)
+        advance_time(DAYS_PER_MONTH)
+        
+        # Load mini-game scene
+        var scene = load("res://FirefighterMiniGame.tscn")
+        if scene:
+                var game_instance = scene.instantiate()
+                game_instance.region_name = fire_data.get("region", "")
+                game_instance.claim_id = fire_data.get("claim_id", 0)
+                get_tree().current_scene.add_child(game_instance)
+                return true
+        return false
+
+func hire_ted_redhair():
+        """Hire the legendary firefighter Ted Redhair - 100% success, expensive"""
+        if pending_fire_event.is_empty():
+                return {"success": false, "message": "Kein aktives Feuer!"}
+        
+        var cost = TED_REDHAIR_COST * inflation_rate
+        if cash < cost:
+                return {"success": false, "message": "Nicht genug Geld! Benötigt: $" + str(int(cost))}
+        
+        # Deduct cost
+        cash -= cost
+        book_transaction("Global", -cost, "Firefighting (Ted Redhair)")
+        
+        # Clear the fire (100% success)
+        var region = pending_fire_event.get("region", "")
+        var claim_id = pending_fire_event.get("claim_id", 0)
+        
+        # Apply 0% damage (complete success)
+        _apply_fire_damage(region, claim_id, 0)
+        
+        pending_fire_event.clear()
+        show_fire_options = false
+        
+        return {"success": true, "message": "Ted Redhair hat das Feuer gelöscht! KEIN SCHADEN!"}
+
+func ignore_fire():
+        """Ignore the fire - field is down for 6 months, then needs re-drilling"""
+        if pending_fire_event.is_empty():
+                return
+        
+        var region = pending_fire_event.get("region", "")
+        var claim_id = pending_fire_event.get("claim_id", 0)
+        
+        # Apply 100% damage (complete failure)
+        _apply_fire_damage(region, claim_id, 100, true)
+        
+        pending_fire_event.clear()
+        show_fire_options = false
+        
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("FELD VERLOREN! Muss in 6 Monaten neu gebohrt werden.", Color.RED)
+
+func _apply_fire_damage(region: String, claim_id, damage_percent: float, complete_failure: bool = false):
+        """Apply fire damage to a claim"""
+        if not regions.has(region):
+                return
+        
+        var claims_list = regions[region].get("claims", [])
+        for claim in claims_list:
+                if claim.get("id", -1) == claim_id:
+                        if complete_failure:
+                                # Field completely destroyed - needs re-drilling after 6 months
+                                claim["drilled"] = false
+                                claim["fire_recovery_months"] = 6
+                                claim["fire_damage"] = 0  # Will recover naturally
+                        else:
+                                # Partial damage - reduced output
+                                claim["fire_damage"] = damage_percent
+                                claim["fire_recovery_months"] = 3 + ceil(damage_percent / 10.0)
+                        break
+        
+        notify_update()
+
+func process_fire_recovery():
+        """Called monthly to process fire damage recovery"""
+        for region_name in regions:
+                var claims_list = regions[region_name].get("claims", [])
+                for claim in claims_list:
+                        if claim.get("fire_recovery_months", 0) > 0:
+                                claim["fire_recovery_months"] -= 1
+                                
+                                if claim["fire_recovery_months"] <= 0:
+                                        # Recovery complete
+                                        var current_damage = claim.get("fire_damage", 0)
+                                        if current_damage > 0:
+                                                claim["fire_damage"] = max(0, current_damage - 10)
+                                                if claim["fire_damage"] > 0:
+                                                        claim["fire_recovery_months"] = 1  # Continue recovery
 
 # --- Helper ---
 func record_history():

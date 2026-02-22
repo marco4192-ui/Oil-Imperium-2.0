@@ -52,7 +52,12 @@ var random_events_pool = [
         {"id": "activist_blockade", "type": "fine", "title": "UMWELT-BLOCKADE", "text": "Aktivisten blockieren die Zufahrtswege.", "base_cost": 40000, "min_year": 1980},
         {"id": "activist_sabotage", "type": "accident_tank", "title": "ÖKO-TERRORISMUS", "text": "Radikale Umweltschützer haben einen Tank sabotiert.", "min_year": 1995},
         {"id": "cyber_attack", "type": "fine", "title": "CYBER-ANGRIFF", "text": "Hacker haben Ihre Systeme angegriffen!", "base_cost": 200000, "min_year": 1990},
-        {"id": "climate_regulation", "type": "fine", "title": "KLIMA-REGULIERUNG", "text": "Neue Umweltgesetze erhöhen Ihre Kosten.", "base_cost": 100000, "min_year": 1995}
+        {"id": "climate_regulation", "type": "fine", "title": "KLIMA-REGULIERUNG", "text": "Neue Umweltgesetze erhöhen Ihre Kosten.", "base_cost": 100000, "min_year": 1995},
+        
+        # Oil Field Fire Events (triggers mini-game)
+        {"id": "oil_field_fire", "type": "oil_fire", "title": "ÖLFELD-BRAND!", "text": "Ein Ölfeld steht in Flammen! Schnelle Reaktion erforderlich!", "min_year": 1970},
+        {"id": "rig_fire_major", "type": "oil_fire", "title": "RIG-BRAND KATASTROPHE", "text": "Mehrere Bohrtürme brennen! Die Situation ist kritisch!", "min_year": 1975},
+        {"id": "well_fire_blowout", "type": "oil_fire", "title": "BLOWOUT-FEUER", "text": "Ein Bohrloch-Blowout hat ein massives Feuer verursacht!", "min_year": 1970}
 ]
 
 var historical_events = [
@@ -311,6 +316,38 @@ func trigger_random_event(gm, e):
                 msg += "\nREGION: " + r_name
                 msg += "\nStatus: BESETZT / GESPERRT"
                 msg += "\nDauer: ca. " + str(e["duration_months"]) + " Monate"
+
+        elif e["type"] == "oil_fire":
+                # Oil field fire - triggers firefighter mini-game
+                var valid_claims = []
+                for r_name in gm.regions:
+                        for claim in gm.regions[r_name]["claims"]:
+                                if claim.get("owned", false) and claim.get("drilled", false) and claim.get("has_oil", false):
+                                        valid_claims.append({"claim": claim, "region": r_name})
+                
+                if valid_claims.is_empty():
+                        return  # No active oil fields to burn
+                
+                var target = valid_claims.pick_random()
+                var claim = target["claim"]
+                var r_name = target["region"]
+                
+                # Store fire data for mini-game
+                gm.pending_fire_event = {
+                        "region": r_name,
+                        "claim_id": claim.get("id", 0),
+                        "event_title": e["title"],
+                        "event_text": e["text"]
+                }
+                
+                msg += "\nREGION: " + r_name
+                msg += "\n\nBRAND LÄUFT! Sie haben folgende Optionen:"
+                msg += "\n1. Selbst löschen (Mini-Game, kostet 1 Monat)"
+                msg += "\n2. Ted Redhair anheuern ($500.000, 100% Erfolg)"
+                msg += "\n3. Ignorieren (Feld 6 Monate ausgefallen)"
+                
+                # Show options dialog
+                gm.show_fire_options = true
 
         # Notify achievement manager if present
         if gm.achievement_manager and (e["type"].begins_with("accident") or e["type"] == "fine" or e["type"] == "terror" or e["type"] == "region_lock"):

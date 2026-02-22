@@ -42,7 +42,6 @@ func _ready():
         create_tutorial_popup()
         create_sabotage_ui() 
         setup_tooltips()
-        create_loan_button()  # After tooltips so we can connect
         
         if not GameManager.data_updated.is_connected(update_ui):
                 GameManager.data_updated.connect(update_ui)
@@ -62,6 +61,11 @@ func _ready():
                 
         # Initial Update
         update_ui()
+        
+        # Check for pending fire events
+        if GameManager.show_fire_options and not GameManager.pending_fire_event.is_empty():
+                await get_tree().create_timer(0.5).timeout
+                show_fire_options_dialog()
 
 # --- KEYBOARD SHORTCUTS ---
 func _input(event):
@@ -293,7 +297,6 @@ func update_ui():
         
         check_newspaper_status()
         check_upgrade_status()
-        _update_loan_button()
 
 func _on_btn_calendar_pressed():
         GameManager.next_day()
@@ -412,19 +415,50 @@ func _on_btn_briefcase_pressed():
         save_popup.position = Vector2(get_viewport().get_mouse_position())
         save_popup.popup()
 
-# 3. TELEFON -> NOTRUFE (Sabotage Reports)
+# 3. TELEFON -> MENU (Notrufe & Kredite)
+var phone_popup: PopupMenu
+
 func _on_btn_phone_pressed(): 
-        var report = GameManager.answer_phone()
-        if report == null:
-                FeedbackOverlay.show_msg("Leitung tot. Keine aktiven Notrufe.", Color.WHITE)
-        else:
-                var msg = "BERICHT: " + report.message
-                var col = Color.ORANGE
-                if report.success and not report.detected:
-                        col = Color.GREEN
-                elif report.detected:
-                        col = Color.RED
-                FeedbackOverlay.show_msg(msg, col)
+        # Create popup menu for phone options
+        if phone_popup:
+                phone_popup.queue_free()
+        
+        phone_popup = PopupMenu.new()
+        add_child(phone_popup)
+        
+        # Check for active sabotage reports
+        var has_reports = false
+        if GameManager.ai_controller:
+                for comp in GameManager.ai_controller.competitors:
+                        if comp.get("sabotage_reports", []).size() > 0:
+                                has_reports = true
+                                break
+        
+        phone_popup.add_item("Notrufe (Sabotage-Berichte)" + (" !" if has_reports else ""), 1)
+        phone_popup.add_item("Kreditzentrale", 2)
+        
+        phone_popup.id_pressed.connect(_on_phone_menu_selected)
+        phone_popup.position = Vector2(get_viewport().get_mouse_position())
+        phone_popup.popup()
+        await phone_popup.popup_hide
+        phone_popup.queue_free()
+
+func _on_phone_menu_selected(id):
+        match id:
+                1:  # Notrufe
+                        var report = GameManager.answer_phone()
+                        if report == null:
+                                FeedbackOverlay.show_msg("Leitung tot. Keine aktiven Notrufe.", Color.WHITE)
+                        else:
+                                var msg = "BERICHT: " + report.message
+                                var col = Color.ORANGE
+                                if report.success and not report.detected:
+                                        col = Color.GREEN
+                                elif report.detected:
+                                        col = Color.RED
+                                FeedbackOverlay.show_msg(msg, col)
+                2:  # Kreditzentrale
+                        _show_loan_menu()
 
 # --- ZEITUNG ---
 func check_newspaper_status():
@@ -780,64 +814,115 @@ func _on_execute_sabotage_pressed():
         if result.success: FeedbackOverlay.show_msg("AUFTRAG ERTEILT: Operation läuft...", Color.GREEN)
         else: FeedbackOverlay.show_msg(result.message, Color.RED)
 
-# --- LOAN BUTTON ---
-var btn_loan: Button
+# --- FIRE OPTIONS DIALOG ---
+var fire_dialog_layer: CanvasLayer
 
-func create_loan_button():
-        # Create a visible loan button in the office
-        btn_loan = Button.new()
-        btn_loan.name = "BtnLoan"
-        btn_loan.text = "$"
-        btn_loan.tooltip_text = "Kreditzentrale (Taste: $)"
-        btn_loan.custom_minimum_size = Vector2(50, 50)
-        btn_loan.position = Vector2(20, 500)  # Left side of screen
-        btn_loan.add_theme_font_size_override("font_size", 24)
-        btn_loan.add_theme_color_override("font_color", Color(0.2, 0.8, 0.2))
+func show_fire_options_dialog():
+        if fire_dialog_layer:
+                fire_dialog_layer.queue_free()
         
-        # Add styling
-        var style = StyleBoxFlat.new()
-        style.bg_color = Color(0.15, 0.15, 0.15)
-        style.border_color = Color(0.3, 0.6, 0.3)
-        style.border_width_left = 2
-        style.border_width_top = 2
-        style.border_width_right = 2
-        style.border_width_bottom = 2
-        style.corner_radius_top_left = 8
-        style.corner_radius_top_right = 8
-        style.corner_radius_bottom_right = 8
-        style.corner_radius_bottom_left = 8
-        btn_loan.add_theme_stylebox_override("normal", style)
+        var fire_data = GameManager.pending_fire_event
+        if fire_data.is_empty():
+                return
         
-        var style_hover = StyleBoxFlat.new()
-        style_hover.bg_color = Color(0.2, 0.3, 0.2)
-        style_hover.border_color = Color(0.4, 0.8, 0.4)
-        style_hover.border_width_left = 2
-        style_hover.border_width_top = 2
-        style_hover.border_width_right = 2
-        style_hover.border_width_bottom = 2
-        style_hover.corner_radius_top_left = 8
-        style_hover.corner_radius_top_right = 8
-        style_hover.corner_radius_bottom_right = 8
-        style_hover.corner_radius_bottom_left = 8
-        btn_loan.add_theme_stylebox_override("hover", style_hover)
+        fire_dialog_layer = CanvasLayer.new()
+        fire_dialog_layer.layer = 150
+        add_child(fire_dialog_layer)
         
-        btn_loan.pressed.connect(_show_loan_menu)
-        add_child(btn_loan)
+        # Dimmer background
+        var dimmer = ColorRect.new()
+        dimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+        dimmer.color = Color(0, 0, 0, 0.85)
+        fire_dialog_layer.add_child(dimmer)
         
-        # Connect tooltip (function already exists)
-        if tooltip_panel:
-                _connect_tooltip(btn_loan, "Kreditzentrale")
+        # Main panel
+        var panel = Panel.new()
+        panel.custom_minimum_size = Vector2(600, 400)
+        panel.set_anchors_preset(Control.PRESET_CENTER)
+        fire_dialog_layer.add_child(panel)
         
-        # Update loan button visibility based on debt
-        _update_loan_button()
-
-func _update_loan_button():
-        if btn_loan and GameManager.loan_manager:
-                var debt = GameManager.loan_manager.get_total_debt()
-                if debt > 0:
-                        btn_loan.modulate = Color(1, 0.6, 0.6)  # Red tint when in debt
-                else:
-                        btn_loan.modulate = Color(1, 1, 1)
+        var margin = MarginContainer.new()
+        margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+        margin.add_theme_constant_override("margin_left", 30)
+        margin.add_theme_constant_override("margin_right", 30)
+        margin.add_theme_constant_override("margin_top", 20)
+        margin.add_theme_constant_override("margin_bottom", 20)
+        panel.add_child(margin)
+        
+        var vbox = VBoxContainer.new()
+        vbox.add_theme_constant_override("separation", 20)
+        margin.add_child(vbox)
+        
+        # Title
+        var title = Label.new()
+        title.text = "🔥 ÖLFELD-BRAND! 🔥"
+        title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        title.add_theme_font_size_override("font_size", 36)
+        title.add_theme_color_override("font_color", Color(1, 0.3, 0))
+        vbox.add_child(title)
+        
+        # Region info
+        var info = Label.new()
+        info.text = "REGION: " + fire_data.get("region", "???")
+        info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        info.add_theme_font_size_override("font_size", 24)
+        info.add_theme_color_override("font_color", Color.YELLOW)
+        vbox.add_child(info)
+        
+        # Description
+        var desc = Label.new()
+        desc.text = fire_data.get("event_text", "Ein Ölfield brennt!")
+        desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        desc.add_theme_font_size_override("font_size", 18)
+        desc.autowrap_mode = TextServer.AUTOWRAP_WORD
+        vbox.add_child(desc)
+        
+        # Spacer
+        var spacer = Control.new()
+        spacer.custom_minimum_size.y = 20
+        vbox.add_child(spacer)
+        
+        # Option buttons
+        var btn_vbox = VBoxContainer.new()
+        btn_vbox.add_theme_constant_override("separation", 15)
+        vbox.add_child(btn_vbox)
+        
+        # Option 1: Play mini-game
+        var btn_play = Button.new()
+        btn_play.text = "SELBST LÖSCHEN (Mini-Game)\nKostet 1 Monat Zeit"
+        btn_play.custom_minimum_size.y = 60
+        btn_play.add_theme_font_size_override("font_size", 20)
+        btn_play.pressed.connect(func():
+                fire_dialog_layer.queue_free()
+                GameManager.start_firefighter_minigame()
+        )
+        btn_vbox.add_child(btn_play)
+        
+        # Option 2: Hire Ted Redhair
+        var btn_ted = Button.new()
+        var ted_cost = int(GameManager.TED_REDHAIR_COST * GameManager.inflation_rate)
+        btn_ted.text = "TED REDHAIR ANHEUERN\n$" + _fmt(ted_cost) + " (100% Erfolg)"
+        btn_ted.custom_minimum_size.y = 60
+        btn_ted.add_theme_font_size_override("font_size", 20)
+        btn_ted.disabled = GameManager.cash < ted_cost
+        btn_ted.pressed.connect(func():
+                var result = GameManager.hire_ted_redhair()
+                fire_dialog_layer.queue_free()
+                FeedbackOverlay.show_msg(result.message, Color.GREEN if result.success else Color.RED)
+        )
+        btn_vbox.add_child(btn_ted)
+        
+        # Option 3: Ignore
+        var btn_ignore = Button.new()
+        btn_ignore.text = "IGNORIEREN\nFeld 6 Monate ausgefallen"
+        btn_ignore.custom_minimum_size.y = 60
+        btn_ignore.add_theme_font_size_override("font_size", 20)
+        btn_ignore.modulate = Color(1, 0.5, 0.5)
+        btn_ignore.pressed.connect(func():
+                GameManager.ignore_fire()
+                fire_dialog_layer.queue_free()
+        )
+        btn_vbox.add_child(btn_ignore)
 
 # --- TOOLTIPS ---
 func setup_tooltips():
@@ -858,7 +943,7 @@ func setup_tooltips():
         _connect_tooltip(btn_map, "Weltkarte / Claims")
         _connect_tooltip(btn_calendar, "Nächster Tag")
         _connect_tooltip(btn_endmonth, "Monat beenden")
-        _connect_tooltip(btn_phone, "Notfall-Leitung")
+        _connect_tooltip(btn_phone, "Telefon (Notrufe & Kredite)")
         _connect_tooltip(btn_briefcase, "Speichern")
         _connect_tooltip(btn_drawer, "Sabotage Dossier")
         _connect_tooltip(btn_newspaper, "Archiv")
