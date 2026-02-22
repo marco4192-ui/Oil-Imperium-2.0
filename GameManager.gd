@@ -1155,15 +1155,6 @@ func generate_claims():
 func get_survey_result(region_name, claim):
         if claim == null or typeof(claim) != TYPE_DICTIONARY: return {"yield":0, "reserves":0, "quality":"UNKNOWN", "confidence":0}
         
-        # Base deviation depends on tech level (better tech = more accurate, but NEVER perfect)
-        var base_accuracy = 0.3  # 30% base inaccuracy even with best tech
-        if tech_bonus_survey_accuracy >= 0.8:
-                base_accuracy = 0.15  # Best tech still has 15% variance
-        elif tech_bonus_survey_accuracy >= 0.4:
-                base_accuracy = 0.25
-        elif tech_bonus_survey_accuracy >= 0.2:
-                base_accuracy = 0.35
-        
         # Determine deviation direction and magnitude
         var roll = randf()
         var deviation = 0.0

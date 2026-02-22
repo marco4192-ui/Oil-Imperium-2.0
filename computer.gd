@@ -1,5 +1,8 @@
 extends Control
 
+# --- IMPORTS ---
+const GameData = preload("res://GameData.gd")
+
 # --- HAUPTMENÜS ---
 @onready var oil_field_menu = $ControlPanel/OilFieldMenu
 @onready var tank_menu = $ControlPanel/TankMenu

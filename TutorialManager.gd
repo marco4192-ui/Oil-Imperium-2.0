@@ -111,7 +111,7 @@ func toggle_tutorial():
         else:
                 enable_tutorial()
 
-func check_trigger(trigger_name: String, context: Dictionary = {}):
+func check_trigger(trigger_name: String, _context: Dictionary = {}):
         if not tutorial_enabled:
                 return
         
@@ -133,7 +133,7 @@ func should_show_step(step_id: String) -> bool:
                 return true
         
         # Check if previous step was completed
-        var step = TUTORIAL_STEPS[step_id]
+        var _step = TUTORIAL_STEPS[step_id]
         for prev_id in TUTORIAL_STEPS:
                 if TUTORIAL_STEPS[prev_id]["next"] == step_id:
                         return prev_id in completed_steps

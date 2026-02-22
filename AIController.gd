@@ -279,10 +279,10 @@ func _strategic_sabotage(bot):
         if sabotage_types.is_empty(): return
         
         # Prefer theft if player has lots of oil stored
-        var stored = game_manager.oil_stored.get(target_region, 0)
+        var region_stored = game_manager.oil_stored.get(target_region, 0)
         var chosen_type = "theft"
         
-        if stored > 50000:
+        if region_stored > 50000:
                 chosen_type = "theft"  # Steal from rich targets
         elif game_manager.tank_capacity.get(target_region, 0) > 1000000:
                 chosen_type = "destroy_tank"  # Destroy capacity
