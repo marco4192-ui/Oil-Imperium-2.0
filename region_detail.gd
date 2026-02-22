@@ -343,11 +343,11 @@ func update_info_panel(claim: Dictionary):
                                 # Quality indicator with color coding
                                 var quality_color = ""
                                 match quality:
-                                        "UNRELIABLE": quality_color = "❌ SEHR UNSICHER"
-                                        "LOW": quality_color = "⚠️ NIEDRIG"
-                                        "MODERATE": quality_color = "◐ MITTEL"
-                                        "GOOD": quality_color = "◉ GUT"
-                                        "HIGH": quality_color = "✓ HOCH"
+                                        "UNRELIABLE": quality_color = "X SEHR UNSICHER"
+                                        "LOW": quality_color = "! NIEDRIG"
+                                        "MODERATE": quality_color = "o MITTEL"
+                                        "GOOD": quality_color = "+ GUT"
+                                        "HIGH": quality_color = "* HOCH"
                                         _: quality_color = "? UNBEKANNT"
                                 
                                 info += "QUALITÄT: " + quality_color + "\n"

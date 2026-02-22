@@ -1009,7 +1009,7 @@ func _show_loan_menu():
         # Bankruptcy warning
         if GameManager.loan_manager.bankruptcy_risk > 0.3:
                 var warning = Label.new()
-                warning.text = "⚠ BANKROTT-RISIKO: " + GameManager.loan_manager.get_bankruptcy_risk_text()
+                warning.text = "WARNUNG BANKROTT-RISIKO: " + GameManager.loan_manager.get_bankruptcy_risk_text()
                 warning.add_theme_color_override("font_color", Color.RED)
                 warning.add_theme_font_size_override("font_size", 18)
                 vbox.add_child(warning)

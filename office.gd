@@ -277,7 +277,7 @@ func _apply_transform(node: Control, data: Dictionary, key_prefix: String):
                 node.position = data[pos_key]
                 
         if data.has(size_key):
-                node.size = data[size_key]
+                node.set_deferred("size", data[size_key])
 
 func update_ui():
         var d = GameManager.date["day"]
