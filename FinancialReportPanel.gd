@@ -287,7 +287,7 @@ func _get_yearly_data() -> Dictionary:
         
         # Group by year (12 months each)
         while current_idx < game_manager.history_profit.size():
-                var year = start_year + int(current_idx / 12)
+                var year = start_year + int(current_idx / 12.0)
                 var year_revenue = 0.0
                 var year_profit = 0.0
                 

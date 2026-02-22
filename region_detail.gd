@@ -357,8 +357,8 @@ func update_info_panel(claim: Dictionary):
                                 info += "\n(Hinweis: Werte sind Schätzungen)"
                 elif not drilled:
                         info += "STATUS: IM BESITZ\nBEREIT ZUR ERSCHLIESSUNG.\n"
-                        if claim.get("surveyed", false): 
-                                var quality = claim.get("survey_quality", "UNKNOWN")
+                        if claim.get("surveyed", false):
+                                var _quality = claim.get("survey_quality", "UNKNOWN")
                                 var confidence = claim.get("survey_confidence", 50)
                                 info += "\n[Prognose: " + str(int(claim.get("survey_yield", 0))) + " BBL/Tag]"
                                 info += " (" + str(confidence) + "% Sicherheit)"

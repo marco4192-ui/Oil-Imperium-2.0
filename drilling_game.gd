@@ -171,7 +171,7 @@ func _process(delta):
                 
                 label.modulate = Color(1, 0.2, 0.2)
                 label.text = "KRITISCH! %.1fs" % (LIMIT_RED - time_in_red)
-                scope_control.modulate = Color(1, 0.5, 0.5) if int(Time.get_ticks_msec() / 100) % 2 == 0 else Color.WHITE
+                scope_control.modulate = Color(1, 0.5, 0.5) if int(Time.get_ticks_msec() / 100.0) % 2 == 0 else Color.WHITE
                 
                 if time_in_red > LIMIT_RED: 
                         game_over("Bohrkopf geschmolzen (Rot)!")

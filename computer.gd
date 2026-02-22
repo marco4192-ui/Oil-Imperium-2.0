@@ -554,7 +554,7 @@ func update_tech_list():
                         
                         _setup_tech_button(btn, tech_id, tech, era_multiplier, era_locked, false)
 
-func _setup_tech_button(btn, tech_id, tech, era_multiplier, era_locked, show_icons):
+func _setup_tech_button(btn, tech_id, tech, era_multiplier, era_locked, _show_icons):
         # Apply era-based cost calculation
         var research_cost = int(tech["research_cost"] * GameManager.inflation_rate * era_multiplier)
         var hardware_cost = int(tech["hardware_cost"] * GameManager.inflation_rate * era_multiplier)
