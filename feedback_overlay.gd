@@ -20,9 +20,9 @@ func show_msg(text: String, color: Color = Color.WHITE):
         label.custom_minimum_size.x = 0
         label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
         
-        # Maximum width for message (80% of screen width)
+        # Set panel size to constrain label width (80% of screen width)
         var max_width = get_viewport().get_visible_rect().size.x * 0.8
-        label.maximum_size = Vector2(max_width, 0)
+        panel.custom_minimum_size.x = max_width
         
         if label.label_settings == null:
                 label.label_settings = LabelSettings.new()
