@@ -1,18 +1,17 @@
 [remap]
 
-importer="mp3"
-type="AudioStreamMP3"
-uid="uid://5p7ltqip6051"
-path="res://.godot/imported/90s-background-melody.mp3-340046fa210f3982c5ffa16f89d21e94.mp3str"
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://c90sbgmusic"
 
 [deps]
 
 source_file="res://assets/background-loops/90s-background-melody.mp3"
-dest_files=["res://.godot/imported/90s-background-melody.mp3-340046fa210f3982c5ffa16f89d21e94.mp3str"]
+dest_files=["res://assets/background-loops/90s-background-melody.mp3"]
 
 [params]
 
-loop=false
+loop=true
 loop_offset=0
 bpm=0
 beat_count=0

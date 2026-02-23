@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Oil Imperium Remake"
-run/main_scene="uid://c07vqkloua03o"
+run/main_scene="res://Opening.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 GameManager="*res://GameManager.gd"
 FeedbackOverlay="*res://FeedbackOverlay.tscn"
+MusicManager="*res://MusicManager.gd"
 
 [display]
 
