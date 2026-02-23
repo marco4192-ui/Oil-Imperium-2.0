@@ -1,7 +1,7 @@
 [remap]
 
-importer="wav"
-type="AudioStreamWAV"
+importer="mp3"
+type="AudioStreamMP3"
 uid="uid://c80sbgmusic"
 
 [deps]
