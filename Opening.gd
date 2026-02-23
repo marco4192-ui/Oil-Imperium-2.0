@@ -122,7 +122,7 @@ func _setup_title():
         
         # Mechanical/steel color scheme - dark steel with metallic accent
         var steel_color = Color(0.7, 0.75, 0.8)  # Light steel gray
-        var dark_steel = Color(0.3, 0.35, 0.4)   # Dark steel for outline
+        var _dark_steel = Color(0.3, 0.35, 0.4)   # Dark steel for outline (future use)
         
         title_label.add_theme_color_override("font_color", steel_color)
         title_label.add_theme_color_override("font_outline_color", Color(0.1, 0.1, 0.12))

@@ -278,10 +278,10 @@ func _create_popup(title: String, text: String):
         
         popup_visible = true
         
-        # Animation - fade in
-        canvas_layer.modulate.a = 0.0
+        # Animation - fade in (animate the overlay, not the CanvasLayer)
+        overlay.modulate.a = 0.0
         var tween = get_tree().create_tween()
-        tween.tween_property(canvas_layer, "modulate:a", 1.0, 0.3)
+        tween.tween_property(overlay, "modulate:a", 1.0, 0.3)
         
         # Ensure button has focus for keyboard interaction
         await get_tree().create_timer(0.1).timeout
