@@ -171,18 +171,26 @@ func _create_popup(title: String, text: String):
         if not viewport:
                 return
         
-        # Create background overlay (semi-transparent)
+        # Create CanvasLayer to ensure popup is ALWAYS on top
+        var canvas_layer = CanvasLayer.new()
+        canvas_layer.name = "TutorialCanvasLayer"
+        canvas_layer.layer = 1000  # Very high layer to be on top of everything
+        viewport.add_child(canvas_layer)
+        
+        # Create background overlay (semi-transparent) - blocks all clicks
         var overlay = ColorRect.new()
         overlay.name = "TutorialOverlay"
-        overlay.color = Color(0, 0, 0, 0.6)
+        overlay.color = Color(0, 0, 0, 0.7)
         overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-        overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+        overlay.mouse_filter = Control.MOUSE_FILTER_STOP  # Block all mouse input behind it
+        canvas_layer.add_child(overlay)
         
         # Create main panel - centered
         popup_panel = PanelContainer.new()
         popup_panel.name = "TutorialPopup"
         popup_panel.set_anchors_preset(Control.PRESET_CENTER)
         popup_panel.custom_minimum_size = Vector2(600, 350)
+        popup_panel.mouse_filter = Control.MOUSE_FILTER_STOP  # Ensure it catches clicks
         
         # Style the panel
         var style = StyleBoxFlat.new()
@@ -228,7 +236,7 @@ func _create_popup(title: String, text: String):
         spacer.custom_minimum_size.y = 10
         vbox.add_child(spacer)
         
-        # Close button
+        # Close button - IMPORTANT: ensure it's clickable
         popup_button = Button.new()
         popup_button.text = "VERSTANDEN"
         popup_button.custom_minimum_size = Vector2(200, 50)
@@ -236,8 +244,9 @@ func _create_popup(title: String, text: String):
         popup_button.add_theme_font_size_override("font_size", 20)
         popup_button.add_theme_color_override("font_color", Color.WHITE)
         popup_button.add_theme_color_override("font_hover_color", Color(0.0, 1.0, 1.0))
+        popup_button.mouse_filter = Control.MOUSE_FILTER_STOP  # Ensure clickability
         
-        # Style the button
+        # Style the button - NORMAL state
         var btn_style = StyleBoxFlat.new()
         btn_style.bg_color = Color(0.2, 0.3, 0.4)
         btn_style.border_color = Color(0.0, 0.8, 1.0)
@@ -245,37 +254,52 @@ func _create_popup(title: String, text: String):
         btn_style.set_corner_radius_all(5)
         popup_button.add_theme_stylebox_override("normal", btn_style)
         
+        # Style the button - HOVER state
         var btn_hover = StyleBoxFlat.new()
-        btn_hover.bg_color = Color(0.3, 0.4, 0.5)
+        btn_hover.bg_color = Color(0.3, 0.5, 0.6)
         btn_hover.border_color = Color(0.0, 1.0, 1.0)
-        btn_hover.set_border_width_all(2)
+        btn_hover.set_border_width_all(3)
         btn_hover.set_corner_radius_all(5)
         popup_button.add_theme_stylebox_override("hover", btn_hover)
+        
+        # Style the button - PRESSED state
+        var btn_pressed = StyleBoxFlat.new()
+        btn_pressed.bg_color = Color(0.1, 0.2, 0.3)
+        btn_pressed.border_color = Color(0.0, 0.6, 0.8)
+        btn_pressed.set_border_width_all(2)
+        btn_pressed.set_corner_radius_all(5)
+        popup_button.add_theme_stylebox_override("pressed", btn_pressed)
         
         popup_button.pressed.connect(_on_popup_button_pressed)
         vbox.add_child(popup_button)
         
-        # Add to scene
+        # Add panel to overlay (which is in CanvasLayer)
         overlay.add_child(popup_panel)
-        viewport.add_child(overlay)
         
         popup_visible = true
         
         # Animation - fade in
-        overlay.modulate.a = 0.0
+        canvas_layer.modulate.a = 0.0
         var tween = get_tree().create_tween()
-        tween.tween_property(overlay, "modulate:a", 1.0, 0.3)
+        tween.tween_property(canvas_layer, "modulate:a", 1.0, 0.3)
+        
+        # Ensure button has focus for keyboard interaction
+        await get_tree().create_timer(0.1).timeout
+        if popup_button and is_instance_valid(popup_button):
+                popup_button.grab_focus()
 
 func _close_popup():
         var viewport = get_tree().root
         if not viewport:
                 return
         
-        var overlay = viewport.get_node_or_null("TutorialOverlay")
-        if overlay:
-                overlay.queue_free()
+        # Find and free the CanvasLayer (which contains the overlay)
+        var canvas_layer = viewport.get_node_or_null("TutorialCanvasLayer")
+        if canvas_layer:
+                canvas_layer.queue_free()
         
         popup_panel = null
+        popup_button = null
         popup_visible = false
 
 func _on_popup_button_pressed():
