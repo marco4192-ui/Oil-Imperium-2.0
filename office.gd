@@ -55,6 +55,10 @@ func _ready():
                 if not GameManager.tech_activated.is_connected(check_upgrade_status):
                                 GameManager.tech_activated.connect(check_upgrade_status)
                 
+                # Connect phone ringing signal for visual feedback
+                if not GameManager.phone_ringing_changed.is_connected(_on_phone_ringing_changed):
+                                GameManager.phone_ringing_changed.connect(_on_phone_ringing_changed)
+                
                 # Trigger tutorial for office entry
                 if GameManager.tutorial_manager and GameManager.tutorial_manager.tutorial_enabled:
                                 GameManager.tutorial_trigger.emit("office_enter")
@@ -66,6 +70,16 @@ func _ready():
                 if GameManager.show_fire_options and not GameManager.pending_fire_event.is_empty():
                                 await get_tree().create_timer(0.5).timeout
                                 show_fire_options_dialog()
+                
+                # Check for pending emergencies
+                if GameManager.emergency_manager and not GameManager.emergency_manager.get_active_emergencies().is_empty():
+                                _start_phone_animation()
+
+func _on_phone_ringing_changed(is_ringing: bool):
+                if is_ringing:
+                                _start_phone_animation()
+                else:
+                                _stop_phone_animation()
 
 # --- KEYBOARD SHORTCUTS ---
 func _input(event):
@@ -297,6 +311,59 @@ func update_ui():
                 
                 check_newspaper_status()
                 check_upgrade_status()
+                check_phone_ringing()
+
+# --- PHONE RINGING VISUAL ---
+func check_phone_ringing():
+                if btn_phone == null:
+                                return
+                
+                # Check if phone should be ringing
+                var should_ring = false
+                
+                # Check for emergencies
+                if GameManager.emergency_manager and not GameManager.emergency_manager.get_active_emergencies().is_empty():
+                                should_ring = true
+                
+                # Check for sabotage reports
+                if GameManager.pending_sabotage_reports.size() > 0:
+                                should_ring = true
+                
+                # Check for story events
+                if GameManager.story_event_manager and not GameManager.story_event_manager.get_pending_event().is_empty():
+                                should_ring = true
+                
+                if should_ring and not GameManager.phone_ringing:
+                                GameManager.phone_ringing = true
+                
+                if GameManager.phone_ringing:
+                                _start_phone_animation()
+                else:
+                                _stop_phone_animation()
+
+func _start_phone_animation():
+                if btn_phone == null:
+                                return
+                
+                # Stop existing tween
+                if phone_ring_tween:
+                                phone_ring_tween.kill()
+                
+                # Create pulsing animation
+                phone_ring_tween = create_tween()
+                phone_ring_tween.set_loops()
+                phone_ring_tween.tween_property(btn_phone, "modulate", Color(1, 0.3, 0.3), 0.3)
+                phone_ring_tween.tween_property(btn_phone, "modulate", Color(1, 1, 1), 0.3)
+
+func _stop_phone_animation():
+                if btn_phone == null:
+                                return
+                
+                if phone_ring_tween:
+                                phone_ring_tween.kill()
+                                phone_ring_tween = null
+                
+                btn_phone.modulate = Color(1, 1, 1)
 
 func _on_btn_calendar_pressed():
                 GameManager.next_day()
@@ -431,10 +498,17 @@ func _get_safe_popup_position(_popup: PopupMenu) -> Vector2:
                 
                 return Vector2(x, y)
 
-# 3. TELEFON -> MENU (Notrufe & Kredite)
+# 3. TELEFON -> MENU (Notrufe, Notfälle & Kredite)
 var phone_popup: PopupMenu
+var phone_ring_tween: Tween
+var emergency_layer: CanvasLayer
 
-func _on_btn_phone_pressed(): 
+func _on_btn_phone_pressed():
+                # First check for emergencies - they take priority!
+                if GameManager.emergency_manager and not GameManager.emergency_manager.get_active_emergencies().is_empty():
+                                _show_emergency_dialog()
+                                return
+                
                 # Create popup menu for phone options
                 if phone_popup:
                                 phone_popup.queue_free()
@@ -450,8 +524,17 @@ func _on_btn_phone_pressed():
                                                                 has_reports = true
                                                                 break
                 
-                phone_popup.add_item("Notrufe (Sabotage-Berichte)" + (" !" if has_reports else ""), 1)
-                phone_popup.add_item("Kreditzentrale", 2)
+                # Check for emergencies
+                var has_emergencies = false
+                if GameManager.emergency_manager:
+                                has_emergencies = not GameManager.emergency_manager.get_active_emergencies().is_empty()
+                
+                phone_popup.add_item("🚨 NOTFALL-MENÜ" + (" (!)" if has_emergencies else ""), 1)
+                phone_popup.add_item("📡 Sabotage-Berichte" + (" (!)" if has_reports else ""), 2)
+                phone_popup.add_item("💰 Kreditzentrale", 3)
+                phone_popup.add_separator()
+                phone_popup.add_item("📞 Lobbying-Kontakte", 4)
+                phone_popup.add_item("🛢️ OPEC-Geheimdienst", 5)
                 
                 phone_popup.id_pressed.connect(_on_phone_menu_selected)
                 phone_popup.position = _get_safe_popup_position(phone_popup)
@@ -461,61 +544,660 @@ func _on_btn_phone_pressed():
 
 func _on_phone_menu_selected(id):
                 match id:
-                                1:  # Notrufe
+                                1:  # Notfall-Menü
+                                                if GameManager.emergency_manager and not GameManager.emergency_manager.get_active_emergencies().is_empty():
+                                                                _show_emergency_dialog()
+                                                else:
+                                                                FeedbackOverlay.show_msg("Keine aktiven Notfälle.\nDas Telefon klingelt bei Problemen.", Color.CYAN)
+                                2:  # Sabotage-Berichte
                                                 var report = GameManager.answer_phone()
                                                 if report == null:
-                                                                FeedbackOverlay.show_msg("Leitung tot. Keine aktiven Notrufe.", Color.WHITE)
+                                                                FeedbackOverlay.show_msg("Leitung tot. Keine aktiven Berichte.", Color.WHITE)
+                                                elif report.get("type") == "emergency":
+                                                                _show_emergency_dialog()
                                                 else:
-                                                                var msg = "BERICHT: " + report.message
+                                                                var data = report.get("data", {})
+                                                                var msg = "BERICHT: " + str(data.get("message", "Unbekannt"))
                                                                 var col = Color.ORANGE
-                                                                if report.success and not report.detected:
+                                                                if data.get("success", false) and not data.get("detected", false):
                                                                                 col = Color.GREEN
-                                                                elif report.detected:
+                                                                elif data.get("detected", false):
                                                                                 col = Color.RED
                                                                 FeedbackOverlay.show_msg(msg, col)
-                                2:  # Kreditzentrale
+                                3:  # Kreditzentrale
                                                 _show_loan_menu()
+                                4:  # Lobbying
+                                                _show_lobbying_menu()
+                                5:  # OPEC
+                                                _show_opec_menu()
+
+# --- EMERGENCY DIALOG ---
+func _show_emergency_dialog():
+                if not GameManager.emergency_manager:
+                                return
+                
+                var emergency = GameManager.emergency_manager.get_current_emergency()
+                if emergency.is_empty():
+                                emergency = GameManager.emergency_manager.answer_phone()
+                
+                if emergency.is_empty():
+                                FeedbackOverlay.show_msg("Kein aktiver Notfall.", Color.WHITE)
+                                return
+                
+                # Create emergency UI layer
+                if emergency_layer:
+                                emergency_layer.queue_free()
+                
+                emergency_layer = CanvasLayer.new()
+                emergency_layer.layer = 120
+                add_child(emergency_layer)
+                
+                # Dimmer
+                var dimmer = ColorRect.new()
+                dimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+                dimmer.color = Color(0, 0, 0, 0.8)
+                dimmer.pressed.connect(func(): pass)  # Block clicks
+                emergency_layer.add_child(dimmer)
+                
+                # Main panel
+                var panel = Panel.new()
+                panel.custom_minimum_size = Vector2(700, 550)
+                panel.set_anchors_preset(Control.PRESET_CENTER)
+                emergency_layer.add_child(panel)
+                
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                margin.add_theme_constant_override("margin_left", 30)
+                margin.add_theme_constant_override("margin_right", 30)
+                margin.add_theme_constant_override("margin_top", 20)
+                margin.add_theme_constant_override("margin_bottom", 20)
+                panel.add_child(margin)
+                
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 15)
+                margin.add_child(vbox)
+                
+                # Header with emergency icon
+                var header = HBoxContainer.new()
+                vbox.add_child(header)
+                
+                var icon = Label.new()
+                icon.text = emergency.get("icon", "⚠️")
+                icon.add_theme_font_size_override("font_size", 48)
+                header.add_child(icon)
+                
+                var title = Label.new()
+                title.text = emergency.get("name", "NOTFALL")
+                title.add_theme_font_size_override("font_size", 32)
+                title.add_theme_color_override("font_color", Color(1, 0.3, 0.2))
+                header.add_child(title)
+                
+                var spacer = Control.new()
+                spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                header.add_child(spacer)
+                
+                var btn_close = Button.new()
+                btn_close.text = "X"
+                btn_close.add_theme_font_size_override("font_size", 24)
+                btn_close.pressed.connect(func(): 
+                                emergency_layer.queue_free()
+                                emergency_layer = null
+                )
+                header.add_child(btn_close)
+                
+                # Description
+                var desc = Label.new()
+                desc.text = emergency.get("formatted_description", emergency.get("description", ""))
+                desc.autowrap_mode = TextServer.AUTOWRAP_WORD
+                desc.add_theme_font_size_override("font_size", 20)
+                vbox.add_child(desc)
+                
+                # Location & Time
+                var info = Label.new()
+                info.text = "📍 " + emergency.get("region", "?") + " | ⏱️ Zeit: " + str(emergency.get("hours_remaining", 0)) + " Stunden"
+                info.add_theme_font_size_override("font_size", 18)
+                info.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+                vbox.add_child(info)
+                
+                # Separator
+                var sep = HSeparator.new()
+                vbox.add_child(sep)
+                
+                # Resolution options label
+                var options_label = Label.new()
+                options_label.text = "MÖGLICHE MAßNAHMEN:"
+                options_label.add_theme_font_size_override("font_size", 22)
+                vbox.add_child(options_label)
+                
+                # Resolution options container
+                var options_container = VBoxContainer.new()
+                options_container.add_theme_constant_override("separation", 10)
+                vbox.add_child(options_container)
+                
+                # Add each resolution option
+                for method in emergency.get("resolution_methods", []):
+                                var btn = Button.new()
+                                var cost = int(method.get("cost", 0) * GameManager.inflation_rate)
+                                var success_rate = int(method.get("success_rate", 0) * 100)
+                                
+                                btn.text = method.get("name", "?") + " - $" + GameManager.format_cash(cost) + " (" + str(success_rate) + "% Erfolg)"
+                                btn.add_theme_font_size_override("font_size", 20)
+                                btn.custom_minimum_size.y = 50
+                                
+                                # Check if player can afford
+                                if cost > GameManager.cash:
+                                                btn.disabled = true
+                                                btn.modulate = Color(0.5, 0.5, 0.5)
+                                
+                                btn.pressed.connect(func(): 
+                                                var result = GameManager.emergency_manager.resolve_emergency(emergency.get("id", ""), method.get("id", ""))
+                                                emergency_layer.queue_free()
+                                                emergency_layer = null
+                                                if result.get("success", false):
+                                                                FeedbackOverlay.show_msg("✅ " + result.get("message", "Erfolg!"), Color.GREEN)
+                                                else:
+                                                                FeedbackOverlay.show_msg("❌ " + result.get("message", "Fehlgeschlagen!"), Color.RED)
+                                )
+                                options_container.add_child(btn)
+                
+                # Spacer
+                var vspacer = Control.new()
+                vspacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+                vbox.add_child(vspacer)
+                
+                # Warning
+                var warning = Label.new()
+                warning.text = "⚠️ Ignorieren führt zu automatischen Strafen nach Ablauf der Zeit!"
+                warning.add_theme_font_size_override("font_size", 16)
+                warning.add_theme_color_override("font_color", Color(1, 0.7, 0.3))
+                warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                vbox.add_child(warning)
+
+# --- LOBBYING MENU ---
+func _show_lobbying_menu():
+                if not GameManager.lobbying_manager:
+                                FeedbackOverlay.show_msg("Lobbying-System nicht verfügbar.", Color.RED)
+                                return
+                
+                var lobby_layer = CanvasLayer.new()
+                lobby_layer.layer = 115
+                add_child(lobby_layer)
+                
+                var dimmer = ColorRect.new()
+                dimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+                dimmer.color = Color(0, 0, 0, 0.85)
+                lobby_layer.add_child(dimmer)
+                
+                var panel = Panel.new()
+                panel.custom_minimum_size = Vector2(800, 600)
+                panel.set_anchors_preset(Control.PRESET_CENTER)
+                lobby_layer.add_child(panel)
+                
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                margin.add_theme_constant_override("margin_left", 25)
+                margin.add_theme_constant_override("margin_right", 25)
+                margin.add_theme_constant_override("margin_top", 20)
+                margin.add_theme_constant_override("margin_bottom", 20)
+                panel.add_child(margin)
+                
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 12)
+                margin.add_child(vbox)
+                
+                # Header
+                var header = HBoxContainer.new()
+                vbox.add_child(header)
+                
+                var title = Label.new()
+                title.text = "🏛️ LOBBYING-ZENTRALE"
+                title.add_theme_font_size_override("font_size", 28)
+                header.add_child(title)
+                
+                var spacer = Control.new()
+                spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                header.add_child(spacer)
+                
+                var btn_close = Button.new()
+                btn_close.text = "X"
+                btn_close.add_theme_font_size_override("font_size", 22)
+                btn_close.pressed.connect(func(): lobby_layer.queue_free())
+                header.add_child(btn_close)
+                
+                # Scroll container for politicians
+                var scroll = ScrollContainer.new()
+                scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+                vbox.add_child(scroll)
+                
+                var politicians_container = VBoxContainer.new()
+                politicians_container.add_theme_constant_override("separation", 8)
+                scroll.add_child(politicians_container)
+                
+                # Add politicians
+                for politician in GameManager.lobbying_manager.get_available_politicians():
+                                var pol_panel = PanelContainer.new()
+                                pol_panel.custom_minimum_size.y = 80
+                                politicians_container.add_child(pol_panel)
+                                
+                                var hbox = HBoxContainer.new()
+                                hbox.add_theme_constant_override("separation", 15)
+                                pol_panel.add_child(hbox)
+                                
+                                # Info
+                                var info_vbox = VBoxContainer.new()
+                                info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                                hbox.add_child(info_vbox)
+                                
+                                var name_lbl = Label.new()
+                                name_lbl.text = politician.get("name", "?")
+                                name_lbl.add_theme_font_size_override("font_size", 20)
+                                info_vbox.add_child(name_lbl)
+                                
+                                var desc_lbl = Label.new()
+                                desc_lbl.text = politician.get("description", "")
+                                desc_lbl.add_theme_font_size_override("font_size", 14)
+                                desc_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+                                desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
+                                info_vbox.add_child(desc_lbl)
+                                
+                                # Cost & Button
+                                var cost_lbl = Label.new()
+                                cost_lbl.text = "$" + GameManager.format_cash(politician.get("cost", 0))
+                                cost_lbl.add_theme_font_size_override("font_size", 18)
+                                cost_lbl.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
+                                hbox.add_child(cost_lbl)
+                                
+                                var btn_bribe = Button.new()
+                                btn_bribe.text = "EINFLUSS KAUFEN"
+                                btn_bribe.disabled = politician.get("cost", 0) > GameManager.cash
+                                btn_bribe.pressed.connect(func():
+                                                _show_lobbying_actions(politician, lobby_layer)
+                                )
+                                hbox.add_child(btn_bribe)
+                
+                # Warning footer
+                var warning = Label.new()
+                warning.text = "⚠️ Vorsicht: Korruption kann zu Skandalen führen!"
+                warning.add_theme_font_size_override("font_size", 14)
+                warning.add_theme_color_override("font_color", Color(1, 0.6, 0.3))
+                warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                vbox.add_child(warning)
+
+func _show_lobbying_actions(politician: Dictionary, parent_layer: CanvasLayer):
+                # Show available actions for this politician
+                var actions_popup = Panel.new()
+                actions_popup.custom_minimum_size = Vector2(500, 400)
+                actions_popup.set_anchors_preset(Control.PRESET_CENTER)
+                parent_layer.add_child(actions_popup)
+                
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                margin.add_theme_constant_override("margin_left", 20)
+                margin.add_theme_constant_override("margin_right", 20)
+                margin.add_theme_constant_override("margin_top", 15)
+                margin.add_theme_constant_override("margin_bottom", 15)
+                actions_popup.add_child(margin)
+                
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 10)
+                margin.add_child(vbox)
+                
+                var title = Label.new()
+                title.text = "Aktionen: " + politician.get("name", "?")
+                title.add_theme_font_size_override("font_size", 22)
+                vbox.add_child(title)
+                
+                for action in GameManager.lobbying_manager.get_available_actions():
+                                var btn = Button.new()
+                                btn.text = action.get("name", "?")
+                                btn.add_theme_font_size_override("font_size", 16)
+                                btn.custom_minimum_size.y = 45
+                                btn.tooltip_text = action.get("description", "")
+                                btn.pressed.connect(func():
+                                                var result = GameManager.lobbying_manager.attempt_lobbying(politician.get("id", ""), action.get("id", ""))
+                                                actions_popup.queue_free()
+                                                if result.get("success", false):
+                                                                FeedbackOverlay.show_msg("✅ " + result.get("message", "Erfolg!"), Color.GREEN)
+                                                elif result.get("scandal", false):
+                                                                FeedbackOverlay.show_msg("🚨 SKANDAL! " + result.get("message", ""), Color.RED)
+                                                else:
+                                                                FeedbackOverlay.show_msg("❌ " + result.get("message", "Fehlgeschlagen"), Color.ORANGE)
+                                )
+                                vbox.add_child(btn)
+                
+                var btn_cancel = Button.new()
+                btn_cancel.text = "ABBRECHEN"
+                btn_cancel.pressed.connect(func(): actions_popup.queue_free())
+                vbox.add_child(btn_cancel)
+
+# --- OPEC MENU ---
+func _show_opec_menu():
+                if not GameManager.opec_manager:
+                                FeedbackOverlay.show_msg("OPEC-System nicht verfügbar.", Color.RED)
+                                return
+                
+                var opec_layer = CanvasLayer.new()
+                opec_layer.layer = 115
+                add_child(opec_layer)
+                
+                var dimmer = ColorRect.new()
+                dimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+                dimmer.color = Color(0, 0, 0, 0.85)
+                opec_layer.add_child(dimmer)
+                
+                var panel = Panel.new()
+                panel.custom_minimum_size = Vector2(750, 550)
+                panel.set_anchors_preset(Control.PRESET_CENTER)
+                opec_layer.add_child(panel)
+                
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                margin.add_theme_constant_override("margin_left", 25)
+                margin.add_theme_constant_override("margin_right", 25)
+                margin.add_theme_constant_override("margin_top", 20)
+                margin.add_theme_constant_override("margin_bottom", 20)
+                panel.add_child(margin)
+                
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 15)
+                margin.add_child(vbox)
+                
+                # Header
+                var header = HBoxContainer.new()
+                vbox.add_child(header)
+                
+                var title = Label.new()
+                title.text = "🛢️ OPEC-GEHEIMDIENST"
+                title.add_theme_font_size_override("font_size", 28)
+                header.add_child(title)
+                
+                var spacer = Control.new()
+                spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                header.add_child(spacer)
+                
+                var btn_close = Button.new()
+                btn_close.text = "X"
+                btn_close.add_theme_font_size_override("font_size", 22)
+                btn_close.pressed.connect(func(): opec_layer.queue_free())
+                header.add_child(btn_close)
+                
+                # Status
+                var status = GameManager.opec_manager.get_opec_status()
+                var status_lbl = Label.new()
+                var crisis_text = "🚨 ÖLKRISE AKTIV!" if status.get("crisis_active", false) else "Markt stabil"
+                status_lbl.text = "Status: " + crisis_text + " | Aktive Deals: " + str(status.get("active_deals", 0))
+                status_lbl.add_theme_font_size_override("font_size", 18)
+                vbox.add_child(status_lbl)
+                
+                # Separator
+                var sep = HSeparator.new()
+                vbox.add_child(sep)
+                
+                # Secret deals header
+                var deals_header = Label.new()
+                deals_header.text = "VERTRAULICHE ANGEBOTE:"
+                deals_header.add_theme_font_size_override("font_size", 20)
+                vbox.add_child(deals_header)
+                
+                # Deals container
+                var scroll = ScrollContainer.new()
+                scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+                vbox.add_child(scroll)
+                
+                var deals_container = VBoxContainer.new()
+                deals_container.add_theme_constant_override("separation", 8)
+                scroll.add_child(deals_container)
+                
+                for deal in GameManager.opec_manager.get_available_secret_deals():
+                                var deal_panel = PanelContainer.new()
+                                deal_panel.custom_minimum_size.y = 70
+                                deals_container.add_child(deal_panel)
+                                
+                                var hbox = HBoxContainer.new()
+                                hbox.add_theme_constant_override("separation", 10)
+                                deal_panel.add_child(hbox)
+                                
+                                var info = VBoxContainer.new()
+                                info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                                hbox.add_child(info)
+                                
+                                var name_lbl = Label.new()
+                                name_lbl.text = deal.get("name", "?")
+                                name_lbl.add_theme_font_size_override("font_size", 18)
+                                info.add_child(name_lbl)
+                                
+                                var desc_lbl = Label.new()
+                                desc_lbl.text = deal.get("description", "")
+                                desc_lbl.add_theme_font_size_override("font_size", 12)
+                                desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+                                info.add_child(desc_lbl)
+                                
+                                var cost_lbl = Label.new()
+                                cost_lbl.text = "$" + GameManager.format_cash(deal.get("cost", 0))
+                                cost_lbl.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
+                                hbox.add_child(cost_lbl)
+                                
+                                var risk_lbl = Label.new()
+                                risk_lbl.text = str(int(deal.get("risk", 0) * 100)) + "% Risiko"
+                                risk_lbl.add_theme_color_override("font_color", Color(1, 0.5, 0.5))
+                                hbox.add_child(risk_lbl)
+                                
+                                var btn = Button.new()
+                                btn.text = "DEAL"
+                                btn.disabled = deal.get("cost", 0) > GameManager.cash
+                                btn.pressed.connect(func():
+                                                var result = GameManager.opec_manager.attempt_secret_deal(deal.get("id", ""))
+                                                opec_layer.queue_free()
+                                                if result.get("success", false):
+                                                                FeedbackOverlay.show_msg("🤝 Deal erfolgreich!", Color.GREEN)
+                                                elif result.get("scandal", false):
+                                                                FeedbackOverlay.show_msg("🚨 " + result.get("message", "Skandal!"), Color.RED)
+                                                else:
+                                                                FeedbackOverlay.show_msg("❌ " + result.get("message", ""), Color.ORANGE)
+                                )
+                                hbox.add_child(btn)
+                
+                # Warning
+                var warning = Label.new()
+                warning.text = "⚠️ Geheimdienste können aufgedeckt werden - hoher Risikofaktor!"
+                warning.add_theme_font_size_override("font_size", 14)
+                warning.add_theme_color_override("font_color", Color(1, 0.6, 0.3))
+                warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                vbox.add_child(warning)
 
 # --- ZEITUNG ---
 func check_newspaper_status():
                 if btn_newspaper:
-                                if GameManager.unread_news.size() > 0:
+                                var has_unread = GameManager.unread_news.size() > 0
+                                var has_headlines = false
+                                
+                                # Check for newspaper headlines
+                                if GameManager.newspaper_manager:
+                                                has_headlines = not GameManager.newspaper_manager.get_current_headlines().is_empty()
+                                
+                                if has_unread or has_headlines:
                                                 btn_newspaper.modulate = Color(1, 0.5, 0.5) 
                                 else:
                                                 btn_newspaper.modulate = Color(1, 1, 1)
 
 func _on_btn_newspaper_pressed():
+                # Check for newspaper headlines first (from NewspaperManager)
+                if GameManager.newspaper_manager:
+                                var headlines = GameManager.newspaper_manager.get_current_headlines()
+                                if not headlines.is_empty():
+                                                _show_newspaper_headlines()
+                                                return
+                
+                # Then check for unread news (old system)
                 if not GameManager.unread_news.is_empty():
                                 var news = GameManager.unread_news.pop_front()
                                 var txt = "[ " + news.get("title", "INFO") + " ]\n\n" + news.get("text", "")
                                 FeedbackOverlay.show_msg(txt, Color.WHITE)
                                 GameManager.news_archive.append(news)
                                 check_newspaper_status()
-                else:
-                                # Show options menu when no news
-                                var options_popup = PopupMenu.new()
-                                add_child(options_popup)
-                                options_popup.add_item("Tutorial-Einstellungen", 1)
-                                options_popup.add_item("Archiv anzeigen (" + str(GameManager.news_archive.size()) + " Einträge)", 2)
-                                options_popup.id_pressed.connect(_on_newspaper_menu_selected)
-                                options_popup.position = _get_safe_popup_position(options_popup)
-                                options_popup.popup()
-                                await options_popup.popup_hide
-                                options_popup.queue_free()
+                                return
+                
+                # Show options menu when no news
+                var options_popup = PopupMenu.new()
+                add_child(options_popup)
+                options_popup.add_item("📰 Zeitung anzeigen", 1)
+                options_popup.add_item("📚 Archiv (" + str(GameManager.news_archive.size()) + " Einträge)", 2)
+                options_popup.add_separator()
+                options_popup.add_item("❓ Tutorial-Einstellungen", 3)
+                options_popup.id_pressed.connect(_on_newspaper_menu_selected)
+                options_popup.position = _get_safe_popup_position(options_popup)
+                options_popup.popup()
+                await options_popup.popup_hide
+                options_popup.queue_free()
+
+func _show_newspaper_headlines():
+                if not GameManager.newspaper_manager:
+                                return
+                
+                var headlines = GameManager.newspaper_manager.get_current_headlines()
+                if headlines.is_empty():
+                                FeedbackOverlay.show_msg("Keine aktuellen Schlagzeilen.", Color.WHITE)
+                                return
+                
+                # Create newspaper display layer
+                var news_layer = CanvasLayer.new()
+                news_layer.layer = 115
+                add_child(news_layer)
+                
+                var dimmer = ColorRect.new()
+                dimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+                dimmer.color = Color(0, 0, 0, 0.85)
+                news_layer.add_child(dimmer)
+                
+                # Newspaper panel
+                var panel = Panel.new()
+                panel.custom_minimum_size = Vector2(700, 600)
+                panel.set_anchors_preset(Control.PRESET_CENTER)
+                news_layer.add_child(panel)
+                
+                # Style the panel like old paper
+                var style = StyleBoxFlat.new()
+                style.bg_color = Color(0.95, 0.92, 0.85)
+                style.border_color = Color(0.3, 0.25, 0.2)
+                style.set_border_width_all(4)
+                panel.add_theme_stylebox_override("panel", style)
+                
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                margin.add_theme_constant_override("margin_left", 30)
+                margin.add_theme_constant_override("margin_right", 30)
+                margin.add_theme_constant_override("margin_top", 20)
+                margin.add_theme_constant_override("margin_bottom", 20)
+                panel.add_child(margin)
+                
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 12)
+                margin.add_child(vbox)
+                
+                # Masthead
+                var masthead = Label.new()
+                masthead.text = "━━━━━ THE DAILY BARREL ━━━━━"
+                masthead.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                masthead.add_theme_font_size_override("font_size", 28)
+                masthead.add_theme_color_override("font_color", Color(0.2, 0.15, 0.1))
+                vbox.add_child(masthead)
+                
+                # Date line
+                var date_line = Label.new()
+                date_line.text = "%s %d | Ölpreis: $%.2f/Fass" % [
+                                _get_month_name_full(GameManager.date["month"]),
+                                GameManager.date["year"],
+                                GameManager.oil_price
+                ]
+                date_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                date_line.add_theme_font_size_override("font_size", 14)
+                date_line.add_theme_color_override("font_color", Color(0.4, 0.35, 0.3))
+                vbox.add_child(date_line)
+                
+                # Separator
+                var sep = HSeparator.new()
+                vbox.add_child(sep)
+                
+                # Scroll container for headlines
+                var scroll = ScrollContainer.new()
+                scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+                vbox.add_child(scroll)
+                
+                var headlines_container = VBoxContainer.new()
+                headlines_container.add_theme_constant_override("separation", 15)
+                scroll.add_child(headlines_container)
+                
+                # Add each headline
+                for headline in headlines:
+                                var headline_box = VBoxContainer.new()
+                                headline_box.add_theme_constant_override("separation", 5)
+                                headlines_container.add_child(headline_box)
+                                
+                                var title = Label.new()
+                                title.text = headline.get("title", "?")
+                                title.autowrap_mode = TextServer.AUTOWRAP_WORD
+                                title.add_theme_font_size_override("font_size", 20)
+                                title.add_theme_color_override("font_color", _get_category_color(headline.get("category", -1)))
+                                headline_box.add_child(title)
+                                
+                                var text = Label.new()
+                                text.text = headline.get("text", "")
+                                text.autowrap_mode = TextServer.AUTOWRAP_WORD
+                                text.add_theme_font_size_override("font_size", 14)
+                                text.add_theme_color_override("font_color", Color(0.2, 0.15, 0.1))
+                                headline_box.add_child(text)
+                                
+                                # Date
+                                var date_lbl = Label.new()
+                                date_lbl.text = "[" + str(headline.get("date", "?")) + "]"
+                                date_lbl.add_theme_font_size_override("font_size", 12)
+                                date_lbl.add_theme_color_override("font_color", Color(0.5, 0.45, 0.4))
+                                headline_box.add_child(date_lbl)
+                
+                # Close button
+                var close_hbox = HBoxContainer.new()
+                close_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+                vbox.add_child(close_hbox)
+                
+                var btn_close = Button.new()
+                btn_close.text = "SCHLIESSEN"
+                btn_close.add_theme_font_size_override("font_size", 18)
+                btn_close.custom_minimum_size = Vector2(200, 50)
+                btn_close.pressed.connect(func(): news_layer.queue_free())
+                close_hbox.add_child(btn_close)
+
+func _get_month_name_full(month: int) -> String:
+                var months = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+                                          "Juli", "August", "September", "Oktober", "November", "Dezember"]
+                return months[month - 1] if month >= 1 and month <= 12 else "?"
+
+func _get_category_color(category: int) -> Color:
+                match category:
+                                0: return Color(0.6, 0.1, 0.1)  # WORLD_EVENT - Dark red
+                                1: return Color(0.1, 0.5, 0.1)  # COMPANY_SUCCESS - Green
+                                2: return Color(0.6, 0.3, 0.1)  # COMPANY_FAILURE - Brown
+                                3: return Color(0.6, 0.1, 0.1)  # HISTORICAL_EVENT - Dark red
+                                4: return Color(0.6, 0.5, 0.1)  # OPEC_NEWS - Gold
+                                5: return Color(0.3, 0.3, 0.6)  # POLITICAL_NEWS - Blue
+                                6: return Color(0.4, 0.4, 0.4)  # MARKET_NEWS - Gray
+                                7: return Color(0.8, 0.3, 0.1)  # DISASTER - Orange
+                                _: return Color(0.2, 0.15, 0.1)
 
 func _on_newspaper_menu_selected(id):
                 match id:
-                                1:
-                                                tutorial_popup.position = _get_safe_popup_position(tutorial_popup)
-                                                tutorial_popup.popup()
-                                2:
+                                1:  # Show newspaper
+                                                _show_newspaper_headlines()
+                                2:  # Archive
                                                 if GameManager.news_archive.is_empty():
-                                                                FeedbackOverlay.show_msg("Archiv ist leer.")
+                                                                FeedbackOverlay.show_msg("Archiv ist leer.", Color.WHITE)
                                                 else:
                                                                 var archive_text = "=== NACHRICHTEN-ARCHIV ===\n\n"
                                                                 for news in GameManager.news_archive:
                                                                                 archive_text += "[" + news.get("date_str", "?") + "] " + news.get("title", "?") + "\n"
                                                                 FeedbackOverlay.show_msg(archive_text, Color.WHITE)
+                                3:  # Tutorial settings
+                                                tutorial_popup.position = _get_safe_popup_position(tutorial_popup)
+                                                tutorial_popup.popup()
 
 # --- UPGRADES ---
 func check_upgrade_status():

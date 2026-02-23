@@ -10,6 +10,12 @@ const EraManager = preload("res://EraManager.gd")
 const ActivityFeed = preload("res://ActivityFeed.gd")
 const AchievementManager = preload("res://AchievementManager.gd")
 const LoanManager = preload("res://LoanManager.gd")
+const NewspaperManager = preload("res://NewspaperManager.gd")
+const LobbyingManager = preload("res://LobbyingManager.gd")
+const OPECManager = preload("res://OPECManager.gd")
+const StoryEventManager = preload("res://StoryEventManager.gd")
+const HistoricalDataManager = preload("res://HistoricalDataManager.gd")
+const EmergencyManager = preload("res://EmergencyManager.gd")
 
 var events_manager = null
 var contracts_manager = null
@@ -19,6 +25,12 @@ var era_manager = null
 var activity_feed = null
 var achievement_manager = null
 var loan_manager = null
+var newspaper_manager = null
+var lobbying_manager = null
+var opec_manager = null
+var story_event_manager = null
+var historical_data_manager = null
+var emergency_manager = null
 
 # --- SIGNALE ---
 signal data_updated 
@@ -211,6 +223,36 @@ func _ready():
         loan_manager = LoanManager.new()
         add_child(loan_manager)
         loan_manager.game_manager = self
+        
+        # Newspaper Manager (handles headlines and news)
+        newspaper_manager = NewspaperManager.new()
+        add_child(newspaper_manager)
+        newspaper_manager.game_manager = self
+        
+        # Lobbying Manager (political influence)
+        lobbying_manager = LobbyingManager.new()
+        add_child(lobbying_manager)
+        lobbying_manager.game_manager = self
+        
+        # OPEC Manager (oil cartel dynamics)
+        opec_manager = OPECManager.new()
+        add_child(opec_manager)
+        opec_manager.game_manager = self
+        
+        # Story Event Manager (dynamic narrative events)
+        story_event_manager = StoryEventManager.new()
+        add_child(story_event_manager)
+        story_event_manager.game_manager = self
+        
+        # Historical Data Manager (real prices and events)
+        historical_data_manager = HistoricalDataManager.new()
+        add_child(historical_data_manager)
+        historical_data_manager.game_manager = self
+        
+        # Emergency Manager (telephone emergency calls)
+        emergency_manager = EmergencyManager.new()
+        add_child(emergency_manager)
+        emergency_manager.game_manager = self
         
         # Connect tutorial trigger signal
         tutorial_trigger.connect(_on_tutorial_trigger)
@@ -604,6 +646,27 @@ func finish_month():
         # Process loan payments
         if loan_manager: loan_manager.process_monthly_payments()
         
+        # Process lobbying effects
+        if lobbying_manager: lobbying_manager.process_monthly()
+        
+        # Process OPEC dynamics
+        if opec_manager: opec_manager.process_monthly()
+        
+        # Check for historical oil crises
+        if opec_manager: opec_manager.check_historical_crisis()
+        
+        # Generate newspaper headlines
+        if newspaper_manager: newspaper_manager.check_monthly_events()
+        
+        # Check for story events
+        if story_event_manager: story_event_manager.check_for_events()
+        
+        # Apply historical oil prices if mode enabled
+        if historical_data_manager: historical_data_manager.apply_historical_prices()
+        
+        # Generate emergency events (for telephone)
+        if emergency_manager: emergency_manager.generate_emergency()
+        
         # Check achievements
         if achievement_manager: achievement_manager.on_month_end()
         
@@ -779,11 +842,25 @@ func trigger_phone_ring(rep):
         phone_ringing_changed.emit(true)
 
 func answer_phone():
-        if pending_sabotage_reports.is_empty(): 
-                phone_ringing = false; phone_ringing_changed.emit(false); return null
-        var rep = pending_sabotage_reports.pop_front()
-        if pending_sabotage_reports.is_empty(): phone_ringing = false; phone_ringing_changed.emit(false)
-        return rep
+        # First check for emergencies (fires, strikes, etc.)
+        if emergency_manager and not emergency_manager.get_active_emergencies().is_empty():
+                return {"type": "emergency", "data": emergency_manager.answer_phone()}
+        
+        # Then check for sabotage reports
+        if not pending_sabotage_reports.is_empty():
+                var rep = pending_sabotage_reports.pop_front()
+                if pending_sabotage_reports.is_empty(): 
+                        phone_ringing = false
+                        phone_ringing_changed.emit(false)
+                return {"type": "sabotage", "data": rep}
+        
+        # Then check for story events
+        if story_event_manager and not story_event_manager.get_pending_event().is_empty():
+                return {"type": "story_event", "data": story_event_manager.get_pending_event()}
+        
+        phone_ringing = false
+        phone_ringing_changed.emit(false)
+        return null
 
 # --- OIL FIELD FIRE HANDLING ---
 const TED_REDHAIR_COST: int = 500000
