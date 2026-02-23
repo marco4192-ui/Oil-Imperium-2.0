@@ -1,5 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1771872838
+::res://::1771873145
 AchievementDisplay.gd::GDScript::8744928356921880903::1771775613::0::1::::<>Control<><>0<>0<><>::
 AchievementManager.gd::GDScript::7508534246863105989::1771769866::0::1::::<>Node<><>0<>0<><>::
 ActivityFeed.gd::GDScript::8157158354063063332::1771769866::0::1::::<>Node<><>0<>0<><>::
@@ -7,7 +7,7 @@ ActivityFeedDisplay.gd::GDScript::3182749932332841229::1771775962::0::1::::<>Con
 AIController.gd::GDScript::7310963370852112485::1771775613::0::1::::<>Node<><>0<>0<><>::
 CharacterCreation.tscn::PackedScene::6594926718906701162::1771769866::0::1::::<><><>0<>0<><>::uid://bdq3ct6x5lr7d::::res://character_creation.gd
 character_creation.gd::GDScript::2631721952975572959::1771870052::0::1::::<>Control<><>0<>0<><>::
-computer.gd::GDScript::7820815963756756052::1771870052::0::1::::<>Control<><>0<>0<><>::
+computer.gd::GDScript::7820815963756756052::1771872845::0::1::::<>Control<><>0<>0<><>::
 Computer.gdshader::Shader::4260831429691800865::1771769866::0::1::::<><><>0<>0<><>::
 Computer.tscn::PackedScene::5546476063133991750::1771769866::0::1::::<><><>0<>0<><>::uid://djopxw55etvg3::::res://computer.gd<>uid://d13f6p2uojwyr::::res://assets/computer/Doto-VariableFont_ROND,wght.ttf<>uid://deut742aqtxi6::::res://assets/70s_Maps/worldmap.png<>uid://b1x8jhotesf74::::res://Computer.gdshader
 ContractManager.gd::GDScript::8989398831821446638::1771769866::0::1::::<>Node<><>0<>0<><>::
@@ -29,7 +29,7 @@ icon.svg::CompressedTexture2D::1845424321584324721::1771769867::1771775681::1:::
 LoanManager.gd::GDScript::4811038550350494386::1771769866::0::1::::<>Node<><>0<>0<><>::
 MapScreen.tscn::PackedScene::1737021449266039165::1771769866::0::1::::<><><>0<>0<><>::uid://drxw70o1ow50a::::res://map_screen.gd
 map_screen.gd::GDScript::8401347336426992794::1771769867::0::1::::<>Control<><>0<>0<><>::
-office.gd::GDScript::5827285552470050302::1771870077::0::1::::<>Control<><>0<>0<><>::
+office.gd::GDScript::5827285552470050302::1771872845::0::1::::<>Control<><>0<>0<><>::
 Office.tscn::PackedScene::105170076274905094::1771769866::0::1::::<><><>0<>0<><>::uid://cpa1sof464y0u::::res://office.gd<>uid://cgya5hrveh546::::res://assets/offices/BüroAlternative.png<>uid://cebtxirdbcm4v::::res://StatusPanel.tscn
 pipe.gd::GDScript::1981590525133743424::1771769867::0::1::::<>Control<><>0<>0<><>::
 Pipe.tscn::PackedScene::8389038202427285405::1771769866::0::1::::<><><>0<>0<><>::uid://3h5rho6i38wq::::res://pipe.gd
@@ -60,7 +60,7 @@ sibirien.png::CompressedTexture2D::2851882425799226722::1771769866::1771775683::
 texas.png::CompressedTexture2D::3892028497338806015::1771769866::1771775683::1::::<><><>0<>0<>3e60843c3436e7d4ca1ed58e58b2f88e<>res://.godot/imported/texas.png-eee3278aa6acbac60919651c9c039453.ctex::
 Venezuela.png::CompressedTexture2D::2970471966011953897::1771769866::1771775683::1::::<><><>0<>0<>3245ec9a8557c42b93c9e2c29017b18c<>res://.godot/imported/Venezuela.png-2230c2ea27c6cb3d868a4ff08ae76202.ctex::
 worldmap.png::CompressedTexture2D::7482517313889176163::1771769866::1771775684::1::::<><><>0<>0<>e3c0b3f90f4f720514afa38b10be732a<>res://.godot/imported/worldmap.png-a9e426102545481a2ce68e565fe6f044.ctex::
-::res://assets/background-loops/::1771870274
+::res://assets/background-loops/::1771872838
 00s-background-melody.mp3::AudioStreamMP3::5060233903000159975::1771854037::1771872838::1::::<><><>0<>0<>6845e5704777a5fc56890e0e938b59c9<>res://.godot/imported/00s-background-melody.mp3-ce84df1e81c8882ca0a9bd63b364c79b.mp3str::
 70s-background-melody.mp3::AudioStreamMP3::4299493677356603718::1771853801::1771872838::1::::<><><>0<>0<>bbe6124c9cf4fda9b43add9d65fd6d7a<>res://.godot/imported/70s-background-melody.mp3-b89a884c45287352373a66b050e72907.mp3str::
 80s-background-melody.mp3::AudioStreamMP3::2213196071086041583::1771853805::1771872838::1::::<><><>0<>0<>0d5175a9ded384e2049cda9eb7c68969<>res://.godot/imported/80s-background-melody.mp3-b9eb0cb3225f49ecfa9b8afb375b18ad.mp3str::
@@ -105,7 +105,7 @@ BüroAlternative.png::CompressedTexture2D::5243573464013904073::1771769866::1771
 BüroClassic.png::CompressedTexture2D::3199631400942527368::1771769866::1771775682::1::::<><><>0<>0<>32e995f1ecd702f9f2998f7bdf1448b2<>res://.godot/imported/BüroClassic.png-e9c147fd55b773f5b707b7acd3e7cb52.ctex::
 BüroHightech.png::CompressedTexture2D::8283430001974742516::1771769866::1771775682::1::::<><><>0<>0<>79adfce1e27174f103e614e64ea55114<>res://.godot/imported/BüroHightech.png-f194f81151c728c8b865d22eff8b45e1.ctex::
 BüroHippie.png::CompressedTexture2D::5816236962830917193::1771769866::1771775682::1::::<><><>0<>0<>b5595b2b4c234c6bbcf03908c057711c<>res://.godot/imported/BüroHippie.png-0c47bc23be6ad4ee350d24789ac8c2b1.ctex::
-::res://assets/opening/::1771869986
+::res://assets/opening/::1771872839
 opening-01.png::CompressedTexture2D::3135969178630540369::1771856271::1771872839::1::::<><><>0<>0<>c3945be4bc88d57246265817fe9b2db3<>res://.godot/imported/opening-01.png-63a7097d15fd2dd6c2b341fb62f3b896.ctex::
 opening-02.png::CompressedTexture2D::6020084426729362004::1771856298::1771872839::1::::<><><>0<>0<>51bc2c90fd030149f1d9cbfadb8e0e5f<>res://.godot/imported/opening-02.png-7e51fe98757e516560f521dca94c8d7f.ctex::
 opening-03.png::CompressedTexture2D::5864649185654968880::1771856324::1771872839::1::::<><><>0<>0<>3dbd8a11fee7c720c60c91c291d03d71<>res://.godot/imported/opening-03.png-168b20a0ff8adbb3c5816002878b6bf9.ctex::
