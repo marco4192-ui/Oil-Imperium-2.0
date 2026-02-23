@@ -106,26 +106,21 @@ var selected_facility_id = ""
 func _ready():
                                 _init_shader()
                                 
+                                # Handle navigation mode - MUST be before any menu setup
+                                _setup_initial_menu()
+                                
                                 apply_era_theme()
                                 connect_research_buttons()
                                 update_map_buttons()
                                 update_tank_buttons_visibility()
                                 update_tank_buy_buttons()
                                 
-                                # Show OilFieldMenu (worldmap) by default
-                                if oil_field_menu:
-                                                oil_field_menu.visible = true
-                                
                                 if sales_slider:
                                                                 apply_retro_slider_style(sales_slider)
                                                                 if not sales_slider.value_changed.is_connected(_on_sales_slider_changed):
                                                                                                 sales_slider.value_changed.connect(_on_sales_slider_changed)
                                 
-                                # Statistik Buttons werden nun durch die Szene verbunden (Methodennamen angepasst)
-                                # if btn_show_current: btn_show_current.pressed.connect(_on_btn_show_current_pressed)
-                                # if btn_show_history: btn_show_history.pressed.connect(_on_btn_show_history_pressed)
-                                
-                                # NEU: Navigations-Buttons für Regionen verbinden
+                                # Navigations-Buttons für Regionen verbinden
                                 if btn_stats_prev: 
                                                                 if btn_stats_prev.pressed.is_connected(_on__pressed): btn_stats_prev.pressed.disconnect(_on__pressed)
                                                                 btn_stats_prev.pressed.connect(_on_stats_prev_region)
@@ -144,6 +139,23 @@ func _ready():
                                 _on_btn_show_current_pressed()
                                 
                                 GameManager.data_updated.connect(refresh_current_view)
+
+func _setup_initial_menu():
+                                # Hide ALL menus first
+                                hide_all_menus()
+                                
+                                # Check navigation mode
+                                var nav_mode = GameManager.computer_nav_mode
+                                
+                                # Reset the nav mode for next entry
+                                GameManager.computer_nav_mode = ""
+                                
+                                # Show appropriate menu based on nav mode
+                                if nav_mode == "map":
+                                                # Coming from map button - show OilFieldMenu
+                                                if oil_field_menu:
+                                                                oil_field_menu.visible = true
+                                # else: no menu active (coming from computer button or other scenes)
 
 func _init_shader():
                                 if crt_layer:

@@ -95,6 +95,10 @@ var is_drilling_practice = false
 var research_center_built = false 
 var current_save_slot = "1" 
 
+# Navigation mode for Computer scene
+# "" = default (no menu), "map" = show OilFieldMenu
+var computer_nav_mode: String = ""
+
 # Minigame Zwischenspeicher
 var pending_sale_region: String = ""
 var pending_sale_value: float = 0.0

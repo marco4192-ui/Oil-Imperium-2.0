@@ -178,11 +178,10 @@ func _create_popup(title: String, text: String):
         overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
         overlay.mouse_filter = Control.MOUSE_FILTER_STOP
         
-        # Create main panel
+        # Create main panel - centered
         popup_panel = PanelContainer.new()
         popup_panel.name = "TutorialPopup"
         popup_panel.set_anchors_preset(Control.PRESET_CENTER)
-        popup_panel.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 300, get_viewport().get_visible_rect().size.y / 2 - 200)
         popup_panel.custom_minimum_size = Vector2(600, 350)
         
         # Style the panel

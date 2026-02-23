@@ -24,8 +24,9 @@ const MAIN_MENU_SCENE := "res://CharacterCreation.tscn"
 
 # Animation timing (total ~31 seconds)
 const TOTAL_DURATION := 31.0
-const IMAGE_INTERVAL := 2.3  # Time between image appearances
-const FIRST_IMAGE_DELAY := 0.5  # Delay before first image
+const IMAGE_INTERVAL := 1.8  # Time between image appearances (was 2.3)
+const FIRST_IMAGE_DELAY := 0.3  # Delay before first image (was 0.5)
+const TITLE_SHOW_TIME := 22.0  # When to show title during music
 
 # UI elements
 var background: ColorRect
@@ -118,9 +119,16 @@ func _setup_title():
         title_label.custom_minimum_size = Vector2(1200, 200)
         title_label.position = Vector2(-600, -100)
         title_label.add_theme_font_size_override("font_size", 96)
-        title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
-        title_label.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0))
-        title_label.add_theme_constant_override("outline_size", 8)
+        
+        # Mechanical/steel color scheme - dark steel with metallic accent
+        var steel_color = Color(0.7, 0.75, 0.8)  # Light steel gray
+        var dark_steel = Color(0.3, 0.35, 0.4)   # Dark steel for outline
+        
+        title_label.add_theme_color_override("font_color", steel_color)
+        title_label.add_theme_color_override("font_outline_color", Color(0.1, 0.1, 0.12))
+        title_label.add_theme_constant_override("outline_size", 12)
+        
+        # Add shadow effect for 3D metallic look
         title_label.modulate.a = 0.0
         title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         title_label.z_index = 100
@@ -162,7 +170,8 @@ func _process(delta):
                 if animation_timer >= next_time - FIRST_IMAGE_DELAY:
                         _show_next_image()
         
-        if not music_player.playing and not title_visible:
+        # Show title at specific time during music, not when music ends
+        if not title_visible and animation_timer >= TITLE_SHOW_TIME:
                 _show_title()
 
 func _show_next_image():
@@ -297,8 +306,9 @@ func _show_title():
 func _pulse_title():
         var tween = create_tween()
         tween.set_loops()
-        tween.tween_property(title_label, "modulate", Color(1.0, 0.9, 0.4), 1.0)
-        tween.tween_property(title_label, "modulate", Color(1.0, 0.85, 0.2), 1.0)
+        # Steel/metallic shimmer effect
+        tween.tween_property(title_label, "modulate", Color(0.85, 0.88, 0.92), 1.2)
+        tween.tween_property(title_label, "modulate", Color(0.7, 0.75, 0.8), 1.2)
 
 func _input(event):
         if event is InputEventMouseButton and event.pressed:
