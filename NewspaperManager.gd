@@ -516,7 +516,8 @@ func _apply_crisis_effect(event: Dictionary):
         
         # Emit market crash signal for severe events
         if crisis_level >= CrisisLevel.SEVERE:
-                market_crash.emit(mult if effect.has("oil_price_mult") else 0.5)
+                var crash_severity = effect.get("oil_price_mult", 0.5)
+                market_crash.emit(crash_severity)
         
         # Apply additional effects
         _apply_event_effect(effect)
