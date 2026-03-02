@@ -1,252 +1,58 @@
 extends Node
 # NewspaperManager.gd - Dynamic news system with era-based evolution
 # 1970s-80s: Classic Newspaper | 1990s: TV News "OilNN" | 2000s+: Online Portal
+# Includes realistic oil crises with NEGATIVE gameplay effects
 
 signal news_published(headline: String, category: String, is_important: bool)
 signal breaking_news(headline: String)
+signal market_crash(severity: float)  # New: Signal for severe market crashes
 
 # --- NEWS MEDIA TYPES ---
 enum MediaType {
-	NEWSPAPER_1970S,	# Classic black & white newspaper
-	NEWSPAPER_1980S,	# Color newspaper with photos
-	TV_NEWS_1990S,		# OilNN TV news channel
-	ONLINE_PORTAL_2000S	# OilNN.com website
+	NEWSPAPER_1970S,
+	NEWSPAPER_1980S,
+	TV_NEWS_1990S,
+	ONLINE_PORTAL_2000S
 }
 
 # --- NEWS CATEGORIES ---
 enum Category {
-	# Oil-specific news
 	OIL_DISCOVERY,
 	OIL_CRISIS,
 	OPEC_NEWS,
 	COMPANY_NEWS,
 	MARKET_NEWS,
-	# World news (non-oil)
 	WORLD_POLITICS,
 	TECHNOLOGY,
 	CULTURE,
 	SPORTS,
 	DISASTERS,
 	ECONOMY,
-	SPACE
+	SPACE,
+	MARKET_CRASH  # New: Severe market crash category
 }
 
-# --- HISTORICAL OIL EVENTS (Real world 1970-2000) ---
-const HISTORICAL_OIL_EVENTS = [
-	# 1970s
-	{"year": 1970, "month": 4, "title": "EARTH DAY BEGRUENDET UMWELTBEWEGUNG",
-	 "text": "Millionen Amerikaner protestieren fuer Umweltbewusstsein. Oelindustrie unter neuer Beobachtung.",
-	 "category": Category.OIL_CRISIS, "effect": {"reputation": -5}, "important": true},
-	{"year": 1973, "month": 10, "title": "OELKRISE BEGINNT - OPEC-EMBARGO",
-	 "text": "Arabische Oelproduzenten verkuenden Embargo gegen USA. Preise vervierfachen sich ueber Nacht!",
-	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 4.0, "inflation": 1.1}, "important": true},
-	{"year": 1974, "month": 3, "title": "TEMPO 100 ZUR TREIBSTOFFSPARUNG",
-	 "text": "Bundesregierung fuehrt Tempolimit auf Autobahnen ein, um Benzin zu sparen.",
-	 "category": Category.MARKET_NEWS, "effect": {"demand": 0.95}},
-	{"year": 1979, "month": 3, "title": "REAKTORUNFALL IN THREE MILE ISLAND",
-	 "text": "Nuklearunfall in Pennsylvania. Oelaktien steigen durch Angst vor Alternativenergie.",
-	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 1.15}},
-	{"year": 1979, "month": 11, "title": "GEISELN IN TEHERAN - OELPREIS EXPLODIERT",
-	 "text": "Amerikanische Geiseln im Iran. Iranische Oelexporte gestoppt. Globaler Panikkauf beginnt.",
-	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 2.0, "volatility": 0.1}, "important": true},
-	# 1980s
-	{"year": 1980, "month": 9, "title": "IRAN-IRAK-KRIEG BEGINNT",
-	 "text": "Krieg zwischen zwei grossen Oelproduzenten bedroht Golf-Exporte. Preise erreichen Rekordhoehen.",
-	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 1.5, "region_blocked": "Saudi-Arabien"}, "important": true},
-	{"year": 1986, "month": 1, "title": "OELPREISSTURZ - $10 PRO FASS",
-	 "text": "OPEC-Preiskrieg ueberschwemmt Markt mit Oel. Preise stuerzen von $30 auf $10. Kleine Produzenten pleite.",
-	 "category": Category.MARKET_NEWS, "effect": {"oil_price_mult": 0.4}, "important": true},
-	{"year": 1988, "month": 7, "title": "PIPER ALPHA KATASTROPHE",
-	 "text": "Nordsee-Oelplattform explodiert, 167 Tote. Sicherheitsvorschriften weltweit verschaerft.",
-	 "category": Category.OIL_CRISIS, "effect": {"safety_costs": 1.2}},
-	{"year": 1989, "month": 3, "title": "EXXON VALDEZ OELPEST",
-	 "text": "Tanker verschüttet 11 Mio. Gallonen vor Alaska. Umweltkatastrophe loest Empoerung aus.",
-	 "category": Category.OIL_CRISIS, "effect": {"reputation_all": -10, "enviro_regs": true}, "important": true},
-	# 1990s
-	{"year": 1990, "month": 8, "title": "IRAK INVADELT KUWAIT - GOLFKRIEG",
-	 "text": "Saddam Husseins Truppen besetzen Kuwait. Oelpreise verdoppeln sich. US-Truppen nach Saudi-Arabien.",
-	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 2.0, "region_blocked": "Saudi-Arabien"}, "important": true},
-	{"year": 1991, "month": 1, "title": "OPERATION WUESTENSTURM",
-	 "text": "US-geführte Koalition startet Luftkrieg gegen Irak. 'Smarte Bomben' live auf CNN.",
-	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 1.3}},
-	{"year": 1997, "month": 7, "title": "ASIATISCHE FINANZKRISE",
-	 "text": "Waehrungszusammenbruch breitet sich in Asien aus. Oelnachfrage sinkt drastisch.",
-	 "category": Category.ECONOMY, "effect": {"oil_price_mult": 0.8, "demand": 0.9}},
-	{"year": 1999, "month": 4, "title": "OPEC PRODUKTIONS-KUERZUNGEN",
-	 "text": "OPEC beschliesst Produktionskuerzung um 1,7 Mio. Fass/Tag. Preise erholen sich.",
-	 "category": Category.OPEC_NEWS, "effect": {"oil_price_mult": 1.3}}
-]
-
-# --- WORLD EVENTS (Non-oil historical events 1970-2000) ---
-const WORLD_EVENTS = [
-	# 1970s - Politics & Culture
-	{"year": 1970, "month": 9, "title": "TOD JIMI HENDRIX",
-	 "text": "Rocklegende Jimi Hendrix mit 27 Jahren gestorben. Eine Aera endet.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1971, "month": 10, "title": "DISNEY WORLD EROEFFNET",
-	 "text": "Walt Disney World in Florida eroeffnet. Groesster Freizeitpark der Welt.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1972, "month": 9, "title": "MUNICHEN OLYMPIA-ATTENTAT",
-	 "text": "Palaestinensische Terrornehmer nehmen israelische Athleten als Geiseln. Tragisches Ende.",
-	 "category": Category.DISASTERS, "effect": {"reputation": -3}, "important": true},
-	{"year": 1972, "month": 11, "title": "ATARI VEROEFFENTLICHT PONG",
-	 "text": "Erstes kommerziell erfolgreiche Videospiel. Beginn der Gaming-Industrie.",
-	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.02}},
-	{"year": 1974, "month": 8, "title": "NIXON TRITT ZURUECK",
-	 "text": "Präsident Nixon tritt wegen Watergate-Skandal zurueck. Erster US-Praesident-Ruecktritt.",
-	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 1.02}, "important": true},
-	{"year": 1975, "month": 4, "title": "VIETNAM-KRIEG ENDET",
-	 "text": "Saigon faellt. Vietnam-Krieg nach 20 Jahren beendet. Tausende fliehen.",
-	 "category": Category.WORLD_POLITICS, "effect": {"demand": 0.98}, "important": true},
-	{"year": 1976, "month": 7, "title": "VIKING 1 LANDET AUF MARS",
-	 "text": "Erste erfolgreiche Marslandung einer US-Sonde. Historischer Moment fuer die Raumfahrt.",
-	 "category": Category.SPACE, "effect": {"tech_discount": 0.03}},
-	{"year": 1977, "month": 5, "title": "STAR WARS KOMMT IN DIE KINOS",
-	 "text": "George Lucas' Weltraumepos veroeffentlicht. Beginn einer neuen Film-Aera.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1977, "month": 8, "title": "ELVIS PRESLEY STIRBT",
-	 "text": "King of Rock'n'Roll tot mit 42 Jahren. Weltweite Trauer.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1978, "month": 7, "title": "ERSTES 'TESTTUBE-BABY' GEBOREN",
-	 "text": "Louise Brown in England geboren - erstes Kind durch kuenstliche Befruchtung.",
-	 "category": Category.TECHNOLOGY, "effect": {}},
-	{"year": 1979, "month": 2, "title": "AYATOLLAH KHOMAINI UEBERNIMMT MACHT",
-	 "text": "Islamische Revolution im Iran. Schah gestuerzt. Fundamentalistisches Regime errichtet.",
-	 "category": Category.WORLD_POLITICS, "effect": {"oil_price_mult": 1.3}, "important": true},
-	# 1980s - Technology & Politics
-	{"year": 1980, "month": 5, "title": "PAC-MAN VEROEFFENTLICHT",
-	 "text": "Das beruehmteste Videospiel aller Zeiten kommt in die Arcades.",
-	 "category": Category.TECHNOLOGY, "effect": {}},
-	{"year": 1980, "month": 12, "title": "JOHN LENNON ERMORDET",
-	 "text": "Ex-Beatle John Lennon vor seiner Wohnung in New York erschossen. Weltweite Bestuerzung.",
-	 "category": Category.CULTURE, "effect": {}, "important": true},
-	{"year": 1981, "month": 8, "title": "IBM PC VEROEFFENTLICHT",
-	 "text": "IBM stellt ersten Personal Computer vor. Beginn der PC-Revolution.",
-	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.05}, "important": true},
-	{"year": 1981, "month": 8, "title": "MTV GEHT ON AIR",
-	 "text": "'Video Killed the Radio Star' - Musikfernsehen startet. Neue Aera der Popkultur.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1982, "month": 6, "title": "E.T. IM KINO",
-	 "text": "Steven Spielbergs E.T. wird zum erfolgreichsten Film aller Zeiten.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1983, "month": 3, "title": "STRATEGIC DEFENSE INITIATIVE",
-	 "text": "Reagan kuendigt 'Star Wars'-Raketenabwehr an. Wettruesten erreicht neuen Hoehepunkt.",
-	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 1.02}},
-	{"year": 1984, "month": 1, "title": "APPLE MACINTOSH VORGESTELLT",
-	 "text": "Erster erfolgreicher Computer mit grafischer Oberflaeche und Maus. '1984' Super-Bowl-Werbespot.",
-	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.04}, "important": true},
-	{"year": 1985, "month": 7, "title": "LIVE AID KONZERTE",
-	 "text": "Bob Geldof organisiert weltweite Konzerte fuer Aethiopien. 1,5 Mrd. Zuschauer.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1986, "month": 1, "title": "CHALLENGER EXPLODIERT",
-	 "text": "Spaceshutter Challenger explodiert 73 Sekunden nach Start. Alle 7 Astronauten tot.",
-	 "category": Category.DISASTERS, "effect": {"tech_discount": -0.02}, "important": true},
-	{"year": 1986, "month": 4, "title": "TSCHERNOBYL KATASTROPHE",
-	 "text": "Reaktorunfall in Tschernobyl. Radioaktive Wolke ueber Europa. Schlimmster Nuklearunfall.",
-	 "category": Category.DISASTERS, "effect": {"oil_price_mult": 1.1, "safety_costs": 1.15}, "important": true},
-	{"year": 1987, "month": 10, "title": "SCHWARZER MONTAG AN DER BOERSE",
-	 "text": "Dow Jones faellt um 22% an einem Tag. Groesster Börsensturz seit 1929.",
-	 "category": Category.ECONOMY, "effect": {"oil_price_mult": 0.9}, "important": true},
-	{"year": 1988, "month": 11, "title": "BUSH SENIOR GEWAEHLT",
-	 "text": "George H.W. Bush wird 41. US-Praesident. Verspricht 'sanftere, nettere Nation'.",
-	 "category": Category.WORLD_POLITICS, "effect": {}},
-	{"year": 1989, "month": 3, "title": "EXXON VALDEZ UMWELTKATASTROPHE",
-	 "text": "Oeltanker laeuft vor Alaska auf Grund. 40.000 Tonnen Rohöl verschüttet.",
-	 "category": Category.DISASTERS, "effect": {"reputation_all": -5}, "important": true},
-	{"year": 1989, "month": 6, "title": "TIANANMEN-PLATZ MASSAKER",
-	 "text": "Chinesische Armee beendet Demos gewaltsam. Bilder eines Mannes vor Panzer gehen um die Welt.",
-	 "category": Category.WORLD_POLITICS, "effect": {}, "important": true},
-	{"year": 1989, "month": 11, "title": "BERLINER MAUER FAELLT",
-	 "text": "Grenzuebergaenge in Berlin geoeffnet. DDR-Buerger strömen in den Westen. Historischer Moment!",
-	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 0.98, "demand": 1.02}, "important": true},
-	# 1990s - The Digital Age
-	{"year": 1990, "month": 4, "title": "HUBBLE TELESKOP IM ALL",
-	 "text": "Space Shuttle Discovery bringt Hubble in die Umlaufbahn. Neuer Blick ins Universum.",
-	 "category": Category.SPACE, "effect": {"tech_discount": 0.02}},
-	{"year": 1990, "month": 10, "title": "DEUTSCHE WIEDERVEREINIGUNG",
-	 "text": "DDR tritt der BRD bei. Deutschland nach 45 Jahren wieder vereint.",
-	 "category": Category.WORLD_POLITICS, "effect": {"demand": 1.03, "inflation": 0.99}, "important": true},
-	{"year": 1991, "month": 12, "title": "SOWJETUNION AUFGELOEST",
-	 "text": "Gorbatschow tritt zurueck. Sowjetunion zerteilt in 15 Republiken. Kalter Krieg beendet.",
-	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 0.98}, "important": true},
-	{"year": 1992, "month": 2, "title": "MAASTRICHT-VERTRAG",
-	 "text": "Europaeische Union gegruendet. Gemeinsame Waehrung geplant.",
-	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 0.99}},
-	{"year": 1993, "month": 2, "title": "WTC-BOMBENANSCHLAG",
-	 "text": "Bombenanschlag auf World Trade Center in New York. 6 Tote, ueber 1000 Verletzte.",
-	 "category": Category.DISASTERS, "effect": {"reputation": -2}},
-	{"year": 1994, "month": 4, "title": "MANDELA WIRD PRAESIDENT",
-	 "text": "Nelson Mandela erster schwarzer Praesident Suedafrikas. Apartheid endgueltig beendet.",
-	 "category": Category.WORLD_POLITICS, "effect": {}, "important": true},
-	{"year": 1994, "month": 6, "title": "O.J. SIMPSON AUTOVERFOLGUNG",
-	 "text": "O.J. Simpson flieht in weissem Ford Bronco. Meistgesehene Live-Verfolgungsjagd.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1995, "month": 8, "title": "WINDOWS 95 VEROEFFENTLICHT",
-	 "text": "Microsoft startet Windows 95 mit 'Start'-Button. Rolling Stones 'Start Me Up' als Werbesong.",
-	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.05}, "important": true},
-	{"year": 1996, "month": 7, "title": "DOLLY DAS KLONSCHAF",
-	 "text": "Erstes erfolgreich geklontes Saeugetier aus erwachsener Zelle. Ethik-Debatte entsteht.",
-	 "category": Category.TECHNOLOGY, "effect": {}},
-	{"year": 1997, "month": 2, "title": "DOLLY PARTON SUPER BOWL",
-	 "text": "Super Bowl XXXI: Packers schlagen Patriots. Prince performs halftime.",
-	 "category": Category.SPORTS, "effect": {}},
-	{"year": 1997, "month": 8, "title": "PRINZESSIN DIANA STIRBT",
-	 "text": "Lady Di bei Autounfall in Paris tot. Weltweite Trauerwelle. Millionen auf den Strassen.",
-	 "category": Category.CULTURE, "effect": {}, "important": true},
-	{"year": 1998, "month": 1, "title": "LEWINSKY-SKANDAL",
-	 "text": "Bill Clinton leugnet Affaere mit Praktikantin. 'I did not have sexual relations...'",
-	 "category": Category.WORLD_POLITICS, "effect": {}},
-	{"year": 1998, "month": 9, "title": "GOOGLE GEGRUENDET",
-	 "text": "Larry Page und Sergey Brin gruenden Google. Beginn einer Suchmaschinen-Dominanz.",
-	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.03}, "important": true},
-	{"year": 1999, "month": 1, "title": "EURO EINGEFUEHRT",
-	 "text": "Europaeische Waehrung offiziell eingefuehrt. 11 Laender beteiligt.",
-	 "category": Category.ECONOMY, "effect": {"inflation": 0.99}},
-	{"year": 1999, "month": 3, "title": "MATRIX IM KINO",
-	 "text": "'The Matrix' revolutioniert Science-Fiction-Filme. 'Bullet Time' wird ikonisch.",
-	 "category": Category.CULTURE, "effect": {}},
-	{"year": 1999, "month": 12, "title": "Y2K-ANGST VOR JAHRESWECHSEL",
-	 "text": "Welt bereitet sich auf moeglichen Computer-Crash vor. 'Millennium-Bug' Panik.",
-	 "category": Category.TECHNOLOGY, "effect": {}}
-]
-
-# --- COMPANY NEWS TEMPLATES ---
-const COMPANY_SUCCESS_TEMPLATES = [
-	{"title": "GROSSER OELFUND FUER %s!", "text": "%s kuendet Entdeckung massiver Oelreserven an. Aktienkurse steigen!", "min_cash": 10000000},
-	{"title": "%s UNTERSCHREIBT MEGA-VERTRAG", "text": "%s sichert Milliardendeal mit grossem Abnehmer.", "min_cash": 5000000},
-	{"title": "%s ERWEITERT OPERATIONEN", "text": "%s eroeffnet neue Bohrungen in vielversprechendem Gebiet.", "min_cash": 2000000},
-	{"title": "%s SCHLAEGT QUARTALSERWARTUNGEN", "text": "Analysten ueberrascht: %s meldet bessere Gewinne als erwartet.", "min_cash": 1000000}
-]
-
-const COMPANY_FAILURE_TEMPLATES = [
-	{"title": "TROCKENES BOHRLOCH KATASTROPHE FUER %s", "text": "%s verschwendet Millionen an unproduktivem Brunnen. Investoren besorgt.", "cash_loss": 500000},
-	{"title": "%s MIT SICHERHEITSVERSTOESSEN KONFRONTIERT", "text": "Behoerden zitieren %s wegen Arbeitsplatzsicherheitsverstössen.", "reputation_max": 50},
-	{"title": "%s OELPEST-UNTERSUCHUNG", "text": "Umweltbehoerden untersuchen %s wegen angeblicher Verschmutzung.", "reputation_max": 60}
-]
-
-# --- RANDOM WORLD EVENTS (Generated dynamically) ---
-const RANDOM_WORLD_EVENTS = [
-	{"title": "NEUE OELFELDENTDECKUNG IN DER NORDSEE", "text": "Massive Reserven entdeckt. Europaeische Produktion steigt.", "category": Category.OIL_DISCOVERY, "effect": {"oil_price_mult": 0.95}},
-	{"title": "HURRIKAN BEDROHT GOLFPLATTFORMEN", "text": "Sturm erzwingt Evakuierung von Offshore-Rigs. Produktion gestoppt.", "category": Category.DISASTERS, "effect": {"production": 0.8}},
-	{"title": "TECHNOLOGISCHER DURCHBRUCH BEIM BOHREN", "text": "Neue Techniken versprechen tiefere, guenstigere Bohrungen.", "category": Category.TECHNOLOGY, "effect": {"drill_cost": 0.9}},
-	{"title": "UMWELTGRUPPEN PROTESTIEREN", "text": "Greenpeace inszeniert Protest an grossem Oelterminal.", "category": Category.DISASTERS, "effect": {"reputation_all": -5}},
-	{"title": "NEUE PIPELINE EROEFFNET", "text": "Grosse Pipeline fertiggestellt, Transportkosten gesenkt.", "category": Category.OIL_DISCOVERY, "effect": {"transport": 0.95}},
-	{"title": "FINANZMINISTER TREFFEN", "text": "G7-Finanzminister diskutieren globale Wirtschaftspolitik.", "category": Category.ECONOMY, "effect": {}},
-	{"title": "NEUE AUTOMODELLS VORGESTELLT", "text": "Automesse zeigt Benzinfresser. Oelnachfrage koennte steigen.", "category": Category.ECONOMY, "effect": {"demand": 1.01}},
-	{"title": "ERDKUNDUNGSSATELLIT GESTARTET", "text": "Neuer Satellit wird geologische Daten verbessern.", "category": Category.SPACE, "effect": {"survey_accuracy": 0.05}},
-	{"title": "GEWERKSCHAFT STREIKT", "text": "Hafenarbeiter legen Arbeit nieder. Oel-Exporte verzoegert.", "category": Category.ECONOMY, "effect": {"transport": 1.1}},
-	{"title": "NEUE UMWELTVORSCHRIFTEN", "text": "Regierung verschaeft Umweltschutzgesetze.", "category": Category.WORLD_POLITICS, "effect": {"safety_costs": 1.05}}
-]
+# --- CRISIS SEVERITY LEVELS ---
+enum CrisisLevel {
+	NONE,
+	MILD,       # Small price impact
+	MODERATE,   # Significant price impact, some sales restrictions
+	SEVERE,     # Major price crash, sales heavily restricted
+	CATASTROPHIC # Extreme crash, oil nearly unsellable
+}
 
 # --- STATE ---
 var game_manager = null
 var triggered_events: Dictionary = {}
 var current_headlines: Array = []
 var newspaper_history: Array = []
-var pending_news: Array = []  # News that should auto-show
+var pending_news: Array = []
 var has_important_news: bool = false
+var current_crisis_level: int = CrisisLevel.NONE
+var crisis_duration_months: int = 0
+var unsellable_oil_percent: float = 0.0  # Percentage of oil that CANNOT be sold
 
-# --- ASSET PATHS (To be replaced with real assets) ---
+# --- ASSET PATHS ---
 const ASSETS = {
 	"newspaper_1970s_frame": "res://assets/news/newspaper_1970s.png",
 	"newspaper_1980s_frame": "res://assets/news/newspaper_1980s.png",
@@ -255,12 +61,585 @@ const ASSETS = {
 	"breaking_banner": "res://assets/news/breaking_banner.png"
 }
 
+# ==============================================================================
+# HISTORICAL OIL CRISES - NEGATIVE EVENTS WITH REAL IMPACTS
+# ==============================================================================
+
+const HISTORICAL_OIL_CRISES = [
+	# ============================================================================
+	# MAJOR PRICE CRASHES (Severe negative impacts)
+	# ============================================================================
+	
+	# 1982-1985: The Creeping Oil Glut (gradual decline)
+	{"year": 1982, "month": 3, "title": "OELSCHWEMME BILDET SICH",
+	 "text": "Nach Jahren der Krisen senken Industrienationen Energieverbrauch. Autos werden effizienter, Kraftwerke stellen auf Kohle um. Erste Ueberkapazitaeten sichtbar.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MILD,
+	 "effect": {"oil_price_mult": 0.85, "demand": 0.95, "unsellable": 0.05},
+	 "duration": 36, "important": true},
+	
+	{"year": 1983, "month": 6, "title": "NORDSEE-OEL FLUTET MARKT",
+	 "text": "Britische und norwegische Nordsee-Felder erreichen Rekordfoerderung. Ueberangebot drueckt Preise weiter. OPEC unter Druck.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MILD,
+	 "effect": {"oil_price_mult": 0.9, "unsellable": 0.08},
+	 "duration": 12, "important": true},
+	
+	{"year": 1985, "month": 1, "title": "OPEC VERLIERT KONTROLLE",
+	 "text": "Saudi-Arabien wird zum 'Swing Producer' gedraengt - drosselt Produktion, verliert Marktanteile. Andere OPEC-Mitglieder foerdern wild. Preise fallen weiter.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MODERATE,
+	 "effect": {"oil_price_mult": 0.8, "demand": 0.9, "unsellable": 0.12},
+	 "duration": 12, "important": true},
+	
+	# 1986: The Great Price War Crash
+	{"year": 1986, "month": 1, "title": "OELPREIS-KRIEG! SAUDI-ARABIEN FLUTET MARKT",
+	 "text": "Saudi-Arabien gibt Swing-Producer-Rolle auf! Um Marktanteile zurueckzugewinnen, verachtfachen sie Foerderung. Preise stuerzen von $30 auf unter $10. KLEINE PRODUZENTEN PLEITE!",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.SEVERE,
+	 "effect": {"oil_price_mult": 0.33, "demand": 0.85, "unsellable": 0.25, "bankruptcy_wave": true},
+	 "duration": 18, "important": true},
+	
+	{"year": 1986, "month": 6, "title": "SOWJETUNION AM ABGRUND",
+	 "text": "Oelpreissturz trifft UdSSR hart. Waehrungsreserven schmelzen. Sowjetische Oelexporte brechen ein. Westliche Oelfirmen melden Insolvenzen.",
+	 "category": Category.ECONOMY, "crisis_level": CrisisLevel.MODERATE,
+	 "effect": {"oil_price_mult": 0.9, "unsellable": 0.15},
+	 "duration": 6},
+	
+	# 1991-1994: Post-Gulf War Slump
+	{"year": 1991, "month": 3, "title": "GOLFKRIEG-ANGST LEGT SICH",
+	 "text": "Kuwait-Ölfelder nicht so zerstoert wie befuerchtet. Produktion kehrt schneller zurueck. Ueberangebot bei schwacher Konjunktur.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MILD,
+	 "effect": {"oil_price_mult": 0.75, "demand": 0.95, "unsellable": 0.1},
+	 "duration": 36, "important": true},
+	
+	{"year": 1993, "month": 2, "title": "BENZIN SO BILLIG WIE SEIT JAHREN",
+	 "text": "Oelpreis faellt auf $13-14. Tankstellen preisen 'Super-Billig-Benzin' an. Fuer Autofahrer ein Segen - fuer Oelfirmen ein Albtraum.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MODERATE,
+	 "effect": {"oil_price_mult": 0.6, "unsellable": 0.18},
+	 "duration": 12, "important": true},
+	
+	# 1997-1998: Asian Financial Crisis
+	{"year": 1997, "month": 7, "title": "ASIEN-KRISE! TIGERSTAATEN BRECHEN EIN",
+	 "text": "Waehrungskrise in Asien. Tigerstaaten stuerzen in Rezession. Oel-Nachfrage bricht ein - genau als OPEC Foerderquoten erhoeht hat.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.SEVERE,
+	 "effect": {"oil_price_mult": 0.5, "demand": 0.75, "unsellable": 0.3},
+	 "duration": 18, "important": true},
+	
+	{"year": 1998, "month": 3, "title": "OEL SO BILLIG SEIT 1960ERN",
+	 "text": "Preis faellt auf unter $10 inflationsbereinigt. Lager weltweit ueberfuellt. OPEC verzweifelt an Produktionskuerzungen.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.SEVERE,
+	 "effect": {"oil_price_mult": 0.4, "unsellable": 0.35},
+	 "duration": 12, "important": true},
+	
+	# 2001: Post-9/11 Crash
+	{"year": 2001, "month": 9, "title": "NACH 9/11: LUFTFAHRT GROUNDERT",
+	 "text": "Nach Terroranschlaegen liegt weltweiter Flugverkehr still. Angst vor globaler Depression. Oel-preis stuerzt von $28 auf $18.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MODERATE,
+	 "effect": {"oil_price_mult": 0.65, "demand": 0.85, "unsellable": 0.2, "aviation_stop": true},
+	 "duration": 6, "important": true},
+	
+	# 2008: Financial Crisis
+	{"year": 2008, "month": 7, "title": "OELPREIS ALLZEITHOCH: $147!",
+	 "text": "Spekulation treibt Preis auf Rekordniveau. Analysten prophezeien $200. Doch das Unheil naht...",
+	 "category": Category.MARKET_NEWS, "effect": {"oil_price_mult": 2.5},
+	 "important": true},
+	
+	{"year": 2008, "month": 9, "title": "LEHMAN BROTHERS PLEITE! WELTFINANZKRISIS",
+	 "text": "US-Investmentbank bricht zusammen. Globale Finanzkrise beginnt. Oelpreis stuerzt von $147 auf $33 in wenigen Monaten. SCHNELLSTER ABSTURZ DER GESCHICHTE!",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.CATASTROPHIC,
+	 "effect": {"oil_price_mult": 0.22, "demand": 0.7, "unsellable": 0.4, "credit_crunch": true},
+	 "duration": 18, "important": true},
+	
+	{"year": 2009, "month": 2, "title": "KEINE KAEUFER FUER OEL",
+	 "text": "Weltweite Rezession. Fabriken stillgelegt. Keiner braucht Oel. Tanklager berlaufen. Händler zahlen Geld, um Oel loszuwerden.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.CATASTROPHIC,
+	 "effect": {"oil_price_mult": 0.3, "unsellable": 0.45},
+	 "duration": 8, "important": true},
+	
+	# 2012: Euro Crisis
+	{"year": 2012, "month": 5, "title": "EURO-SCHULDENKRISE GRIFFT AUF OEL UEBER",
+	 "text": "Griechenland, Spanien, Italien am Abgrund. Angst vor Zerfall der Eurozone. Oelpreis faellt von $125 auf unter $90.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MODERATE,
+	 "effect": {"oil_price_mult": 0.7, "demand": 0.9, "unsellable": 0.15, "euro_instability": true},
+	 "duration": 8, "important": true},
+	
+	# 2014-2016: Shale Oil Glut
+	{"year": 2014, "month": 6, "title": "FRACKING-BOOM: USA WIRD TOP-PRODUZENT",
+	 "text": "Amerikanisches Schieferoel flutet Markt. USA verdraengen Saudi-Arabien als groessten Produzenten. OPEC mit harter Entscheidung.",
+	 "category": Category.MARKET_NEWS, "effect": {"oil_price_mult": 0.85},
+	 "important": true},
+	
+	{"year": 2014, "month": 11, "title": "OPEC LEHNT KUERZUNGEN AB - PREISSTURZ!",
+	 "text": "OPEC beschliesst: KEINE Produktionskuerzung! Ziel: US-Fracking unrentabel machen. 'Marktbereinigung' durch Billig-Oel. Preis faellt von $100 auf $50.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.SEVERE,
+	 "effect": {"oil_price_mult": 0.45, "demand": 0.9, "unsellable": 0.3, "fracking_war": true},
+	 "duration": 24, "important": true},
+	
+	{"year": 2016, "month": 1, "title": "OELPREIS TIEFPUNKT: $27 PRO FASS",
+	 "text": "Drei Jahre Preisverfall gipfeln in historischem Tief. US-Fracker gehen pleite. OPEC-Länder bluten. Iran kehrt auf Markt zurueck.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.SEVERE,
+	 "effect": {"oil_price_mult": 0.25, "unsellable": 0.35},
+	 "duration": 6, "important": true},
+	
+	# 2018: Christmas Crash
+	{"year": 2018, "month": 10, "title": "WEIHNACHTS-STURZ: $86 AUF $50",
+	 "text": "Handelskrieg USA-China. Ueberraschende Iran-Sanktions-Ausnahmen von Trump. Markt 'ueberversorgt'. Preis stuerzt 40% in 3 Monaten.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.MODERATE,
+	 "effect": {"oil_price_mult": 0.58, "unsellable": 0.2, "trade_war": true},
+	 "duration": 4, "important": true},
+	
+	# 2020: COVID-19 Pandemic
+	{"year": 2020, "month": 3, "title": "CORONA-PANDEMIE: WELT STEHT STILL",
+	 "text": "Globale Lockdowns. Flugverkehr gestoppt. Autos bleiben in Garagen. Oel-Nachfrage bricht um 30% ein. Saudi-Russland Preiskrieg verschlimmert Lage.",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.CATASTROPHIC,
+	 "effect": {"oil_price_mult": 0.15, "demand": 0.5, "unsellable": 0.5, "global_lockdown": true},
+	 "duration": 6, "important": true},
+	
+	{"year": 2020, "month": 4, "title": "HISTORISCH: NEGATIVER OELPREIS!",
+	 "text": "WTI-Preis faellt auf -$37! Händler ZAHLEN Geld, um Oel loszuwerden. Lager weltweit voll. Noch NIE in der Geschichte passiert!",
+	 "category": Category.MARKET_CRASH, "crisis_level": CrisisLevel.CATASTROPHIC,
+	 "effect": {"oil_price_mult": -0.37, "demand": 0.4, "unsellable": 0.6, "negative_price": true},
+	 "duration": 2, "important": true},
+]
+
+# Historical positive oil events (price spikes)
+const HISTORICAL_OIL_EVENTS = [
+	# 1970s Oil Shocks
+	{"year": 1973, "month": 10, "title": "OELKRISE! OPEC-EMBARGO GEGEN WESTEN",
+	 "text": "Arabische Oelproduzenten verkuenden Embargo gegen USA und Westeuropa. Preise vervierfachen sich ueber Nacht! Benzinschlange kilometerlang.",
+	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 4.0, "inflation": 1.1, "supply_crisis": true},
+	 "important": true},
+	
+	{"year": 1979, "month": 11, "title": "GEISELN IN TEHERAN - ZWEITE OELKRISE",
+	 "text": "Amerikanische Geiseln im Iran. Iranische Oelexporte gestoppt. Globaler Panikkauf beginnt. Preise verdoppeln sich.",
+	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 2.0, "volatility": 0.15, "supply_crisis": true},
+	 "important": true},
+	
+	{"year": 1980, "month": 9, "title": "IRAN-IRAK-KRIEG BEGINNT",
+	 "text": "Krieg zwischen zwei grossen Oelproduzenten bedroht Golf-Exporte. Preise erreichen Rekordhoehen.",
+	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 1.5, "region_blocked": "Saudi-Arabien"},
+	 "important": true},
+	
+	# 1990 Gulf War
+	{"year": 1990, "month": 8, "title": "IRAK INVADELT KUWAIT!",
+	 "text": "Saddam Husseins Truppen besetzen Kuwait. Oelpreise verdoppeln sich. US-Truppen nach Saudi-Arabien.",
+	 "category": Category.OIL_CRISIS, "effect": {"oil_price_mult": 2.0, "region_blocked": "Saudi-Arabien"},
+	 "important": true},
+	
+	# Recovery events
+	{"year": 1999, "month": 4, "title": "OPEC EINIG: PRODUKTIONS-KUERZUNG",
+	 "text": "OPEC beschliesst Produktionskuerzung um 1,7 Mio. Fass/Tag. Preise erholen sich nach Jahren des Niedergangs.",
+	 "category": Category.OPEC_NEWS, "effect": {"oil_price_mult": 1.5, "demand": 1.1},
+	 "important": true},
+	
+	{"year": 2000, "month": 9, "title": "OELPREIS ERHOLT SICH",
+	 "text": "Nach Jahren der Krise erreicht Preis wieder $30. Asien erholt sich. Nachfrage steigt.",
+	 "category": Category.MARKET_NEWS, "effect": {"oil_price_mult": 1.3, "demand": 1.15}},
+]
+
+# World events with mixed effects
+const WORLD_EVENTS = [
+	# 1970s
+	{"year": 1970, "month": 4, "title": "EARTH DAY: UMWELTBEWEGUNG STARTET",
+	 "text": "Millionen protestieren fuer Umwelt. Oelindustrie unter Beobachtung. Neue Regulierungen drohen.",
+	 "category": Category.WORLD_POLITICS, "effect": {"regulations": 1.1, "reputation_all": -5}},
+	
+	{"year": 1972, "month": 9, "title": "MUNICHEN: OLYMPIA-ATTENTAT",
+	 "text": "Palaestinensische Terrornehmer nehmen israelische Athleten als Geiseln. Tragisches Ende live im TV.",
+	 "category": Category.DISASTERS, "effect": {"security_costs": 1.1}, "important": true},
+	
+	{"year": 1974, "month": 8, "title": "NIXON TRITT ZURUECK - WATERGATE",
+	 "text": "Praesident Nixon tritt zurueck. Erster US-Praesident-Ruecktritt. Politische Instabilitaet.",
+	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 1.03}, "important": true},
+	
+	{"year": 1976, "month": 7, "title": "VIKING 1 AUF DEM MARS",
+	 "text": "Erste erfolgreiche Marslandung. Technischer Durchbruch fuer Raumfahrt.",
+	 "category": Category.SPACE, "effect": {"tech_discount": 0.03}},
+	
+	{"year": 1979, "month": 3, "title": "THREE MILE ISLAND: REAKTORUNFALL",
+	 "text": "Nuklearunfall in Pennsylvania. Oelaktien steigen - Angst vor Atomkraft.",
+	 "category": Category.DISASTERS, "effect": {"oil_price_mult": 1.15, "nuclear_fear": true}},
+	
+	# 1980s
+	{"year": 1981, "month": 8, "title": "IBM PC VEROEFFENTLICHT",
+	 "text": "IBM stellt ersten Personal Computer vor. Beginn der PC-Revolution. Digitales Zeitalter beginnt.",
+	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.05}, "important": true},
+	
+	{"year": 1984, "month": 1, "title": "APPLE MACINTOSH: '1984'",
+	 "text": "Erster Computer mit grafischer Oberflaeche und Maus. Revolutioniert Büroarbeit.",
+	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.04}, "important": true},
+	
+	{"year": 1986, "month": 4, "title": "TSCHERNOBYL: SUPER-GAU",
+	 "text": "Reaktorunfall in Tschernobyl. Radioaktive Wolke ueber Europa. Schlimmster Nuklearunfall der Geschichte.",
+	 "category": Category.DISASTERS, "effect": {"oil_price_mult": 1.1, "safety_costs": 1.15, "nuclear_fear": true}, "important": true},
+	
+	{"year": 1987, "month": 10, "title": "SCHWARZER MONTAG: BOERSENCrash",
+	 "text": "Dow Jones faellt um 22% an einem Tag. Groesster Börsensturz seit 1929.",
+	 "category": Category.ECONOMY, "effect": {"oil_price_mult": 0.85, "demand": 0.95}, "important": true},
+	
+	{"year": 1989, "month": 11, "title": "BERLINER MAUER FAELLT!",
+	 "text": "Grenzuebergaenge geoeffnet. DDR-Buerger stroemen in den Westen. Geschichte wird geschrieben!",
+	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 0.98, "demand": 1.05, "new_markets": true}, "important": true},
+	
+	# 1990s
+	{"year": 1990, "month": 10, "title": "DEUTSCHE WIEDERVEREINIGUNG",
+	 "text": "DDR tritt der BRD bei. Deutschland nach 45 Jahren wieder vereint.",
+	 "category": Category.WORLD_POLITICS, "effect": {"demand": 1.05, "inflation": 0.99}, "important": true},
+	
+	{"year": 1991, "month": 12, "title": "SOWJETUNION AUFGELOEST",
+	 "text": "Gorbatschow tritt zurueck. Sowjetunion zerteilt in 15 Republiken. Kalter Krieg beendet.",
+	 "category": Category.WORLD_POLITICS, "effect": {"inflation": 0.98, "new_markets": true}, "important": true},
+	
+	{"year": 1995, "month": 8, "title": "WINDOWS 95: START-KNOPF AERA",
+	 "text": "Microsoft startet Windows 95. 'Start Me Up' von Rolling Stones als Werbesong.",
+	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.05}, "important": true},
+	
+	{"year": 1997, "month": 8, "title": "PRINZESSIN DIANA STIRBT",
+	 "text": "Lady Di bei Autounfall in Paris tot. Weltweite Trauerwelle.",
+	 "category": Category.CULTURE, "effect": {}, "important": true},
+	
+	{"year": 1998, "month": 9, "title": "GOOGLE GEGRUENDET",
+	 "text": "Larry Page und Sergey Brin gruenden Suchmaschine. Beginn einer neuen Aera.",
+	 "category": Category.TECHNOLOGY, "effect": {"tech_discount": 0.03}, "important": true},
+	
+	{"year": 1999, "month": 1, "title": "EURO EINGEFUEHRT",
+	 "text": "Europaeische Waehrung offiziell eingefuehrt. 11 Laender beteiligt.",
+	 "category": Category.ECONOMY, "effect": {"inflation": 0.99}},
+]
+
+# Random world events
+const RANDOM_WORLD_EVENTS = [
+	{"title": "HURRIKAN BEDROHT GOLFPLATTFORMEN", "text": "Sturm erzwingt Evakuierung. Produktion gestoppt.", "category": Category.DISASTERS, "effect": {"production": 0.7, "oil_price_mult": 1.05}},
+	{"title": "NEUE OELFELDENTDECKUNG IN DER NORDSEE", "text": "Massive Reserven entdeckt.", "category": Category.OIL_DISCOVERY, "effect": {"oil_price_mult": 0.95}},
+	{"title": "GEWERKSCHAFT STREIKT IN HAFEN", "text": "Hafenarbeiter legen Arbeit nieder. Exporte verzoegert.", "category": Category.ECONOMY, "effect": {"transport": 1.15}},
+	{"title": "UMWELTGRUPPEN PROTESTIEREN", "text": "Greenpeace bei Oelterminal. Negative Schlagzeilen.", "category": Category.DISASTERS, "effect": {"reputation_all": -5}},
+	{"title": "TECHNOLOGIE-DURCHBRUCH BEIM BOHREN", "text": "Neue Technik verspricht tiefere Bohrungen.", "category": Category.TECHNOLOGY, "effect": {"drill_cost": 0.9}},
+	{"title": "NEUE UMWELTVORSCHRIFTEN", "text": "Regierung verschaeft Gesetze.", "category": Category.WORLD_POLITICS, "effect": {"safety_costs": 1.08}},
+	{"title": "AUTO-MESSE: NEUE BENZINFRESSER", "text": "SUV-Boom koennte Nachfrage steigern.", "category": Category.ECONOMY, "effect": {"demand": 1.02}},
+	{"title": "ERDKUNDUNGSSATELLIT GESTARTET", "text": "Neuer Satellit verbessert geologische Daten.", "category": Category.SPACE, "effect": {"survey_accuracy": 0.05}},
+	{"title": "PIPELINE-LECK ENTDECKT", "text": "Leck in Hauptleitung. Lieferungen unterbrochen.", "category": Category.DISASTERS, "effect": {"transport": 1.2, "oil_price_mult": 1.03}},
+	{"title": "REFINERY FIRE IN TEXAS", "text": "Raffinerie-Brand in Houston. Kapazitaet reduziert.", "category": Category.DISASTERS, "effect": {"refining_capacity": 0.85, "oil_price_mult": 1.08}},
+	# Negative demand events
+	{"title": "MILDER WINTER IN EUROPA", "text": "Heizoel-Nachfrage sinkt deutlich.", "category": Category.ECONOMY, "effect": {"demand": 0.95}},
+	{"title": "ELEKTROAUTO-BOOM BEDROHT OEL", "text": "Mehr Elektroautos auf Strassen. Benzinverbrauch sinkt.", "category": Category.TECHNOLOGY, "effect": {"demand": 0.97, "oil_price_mult": 0.98}},
+	{"title": "REZESSION IN JAPAN", "text": "Japanische Wirtschaft schrumpft. Importe sinken.", "category": Category.ECONOMY, "effect": {"demand": 0.96}},
+	{"title": "LAGER WELTWEIT GEFUELLT", "text": "Ueberangebot. Lager fast voll.", "category": Category.MARKET_NEWS, "effect": {"unsellable": 0.05, "oil_price_mult": 0.97}},
+]
+
+# Company news templates
+const COMPANY_FAILURE_TEMPLATES = [
+	{"title": "TROCKENES BOHRLOCH KATASTROPHE FUER %s", "text": "%s verschwendet Millionen an unproduktivem Brunnen. Investoren besorgt."},
+	{"title": "%s OELPEST-UNTERSUCHUNG", "text": "Umweltbehoerden untersuchen %s wegen Verschmutzung. Geldstrafen drohen."},
+	{"title": "%s MIT SICHERHEITSVERSTOESSEN", "text": "Behoerden zitieren %s. Anlagen muessen nachgeruestet werden."},
+	{"title": "INVESTOREN VERKLAGEN %s", "text": "Aktionaere werfen %s Fehlmanagement vor. Aktienkurs stuerzt."},
+	{"title": "%s MUSS RIGS ABSTELLEN", "text": "Bei niedrigen Preisen schreibt %s Verluste. Foerderung wird gedrosselt."},
+]
+
+const COMPANY_SUCCESS_TEMPLATES = [
+	{"title": "GROSSER OELFUND FUER %s!", "text": "%s kuendet Entdeckung massiver Reserven an. Aktienkurs steigt!"},
+	{"title": "%s UNTERSCHREIBT MEGA-VERTRAG", "text": "%s sichert Milliardendeal mit grossem Abnehmer."},
+	{"title": "%s SCHLAEGT ERWARTUNGEN", "text": "Analysten ueberrascht: %s meldet bessere Gewinne als erwartet."},
+]
+
 func _ready():
 	await get_tree().create_timer(0.5).timeout
 	if has_node("/root/GameManager"):
 		game_manager = get_node("/root/GameManager")
 
-# --- GET CURRENT MEDIA TYPE ---
+# ==============================================================================
+# CRISIS MANAGEMENT
+# ==============================================================================
+
+func get_crisis_level() -> int:
+	return current_crisis_level
+
+func get_unsellable_percent() -> float:
+	return unsellable_oil_percent
+
+func is_in_crisis() -> bool:
+	return current_crisis_level > CrisisLevel.NONE
+
+func can_sell_oil(amount: float) -> float:
+	# Returns how much of the requested amount can actually be sold
+	if unsellable_oil_percent <= 0:
+		return amount
+	var sellable_percent = 1.0 - unsellable_oil_percent
+	return amount * sellable_percent
+
+func process_crisis_duration():
+	# Called monthly to reduce crisis effects over time
+	if crisis_duration_months > 0:
+		crisis_duration_months -= 1
+		if crisis_duration_months <= 0:
+			_end_crisis()
+
+func _end_crisis():
+	current_crisis_level = CrisisLevel.NONE
+	unsellable_oil_percent = 0.0
+	# Emit recovery signal
+	if game_manager:
+		game_manager.set_meta("crisis_active", false)
+
+# ==============================================================================
+# MONTHLY NEWS GENERATION
+# ==============================================================================
+
+func check_monthly_events():
+	if game_manager == null:
+		return []
+	
+	current_headlines.clear()
+	has_important_news = false
+	var year = game_manager.date["year"]
+	var month = game_manager.date["month"]
+	
+	# Process ongoing crisis duration
+	process_crisis_duration()
+	
+	# 1. Check oil crises (most important - can override other effects)
+	for event in HISTORICAL_OIL_CRISES:
+		var event_key = "crisis_%d_%d" % [event["year"], event["month"]]
+		if not triggered_events.has(event_key):
+			if year == event["year"] and month == event["month"]:
+				triggered_events[event_key] = true
+				var headline = _create_headline_from_event(event)
+				current_headlines.append(headline)
+				if event.get("important", false):
+					has_important_news = true
+					pending_news.append(headline)
+				_apply_crisis_effect(event)
+	
+	# 2. Check historical oil events
+	for event in HISTORICAL_OIL_EVENTS:
+		var event_key = "oil_%d_%d" % [event["year"], event["month"]]
+		if not triggered_events.has(event_key):
+			if year == event["year"] and month == event["month"]:
+				triggered_events[event_key] = true
+				var headline = _create_headline_from_event(event)
+				current_headlines.append(headline)
+				if event.get("important", false):
+					has_important_news = true
+				_apply_event_effect(event.get("effect", {}))
+	
+	# 3. Check world events
+	for event in WORLD_EVENTS:
+		var event_key = "world_%d_%d" % [event["year"], event["month"]]
+		if not triggered_events.has(event_key):
+			if year == event["year"] and month == event["month"]:
+				triggered_events[event_key] = true
+				var headline = _create_headline_from_event(event)
+				current_headlines.append(headline)
+				if event.get("important", false):
+					has_important_news = true
+				_apply_event_effect(event.get("effect", {}))
+	
+	# 4. Generate random world event (20% chance)
+	if randf() < 0.20:
+		var event = RANDOM_WORLD_EVENTS.pick_random()
+		var headline = _create_headline_from_event(event)
+		current_headlines.append(headline)
+		_apply_event_effect(event.get("effect", {}))
+	
+	# 5. Generate company-specific news
+	current_headlines.append_array(_generate_company_news())
+	
+	# 6. Store headlines with date
+	for headline in current_headlines:
+		headline["date"] = "%02d/%d" % [month, year]
+		newspaper_history.append(headline)
+		news_published.emit(headline["title"], _category_to_string(headline["category"]), headline.get("important", false))
+	
+	return current_headlines
+
+func _create_headline_from_event(event: Dictionary) -> Dictionary:
+	return {
+		"title": event["title"],
+		"text": event["text"],
+		"category": event["category"],
+		"effect": event.get("effect", {}),
+		"important": event.get("important", false),
+		"crisis_level": event.get("crisis_level", CrisisLevel.NONE)
+	}
+
+func _category_to_string(cat: int) -> String:
+	match cat:
+		Category.OIL_DISCOVERY: return "Oel-Entdeckung"
+		Category.OIL_CRISIS: return "Oelkrise"
+		Category.OPEC_NEWS: return "OPEC"
+		Category.COMPANY_NEWS: return "Firmen-News"
+		Category.MARKET_NEWS: return "Markt"
+		Category.WORLD_POLITICS: return "Weltpolitik"
+		Category.TECHNOLOGY: return "Technologie"
+		Category.CULTURE: return "Kultur"
+		Category.SPORTS: return "Sport"
+		Category.DISASTERS: return "Katastrophe"
+		Category.ECONOMY: return "Wirtschaft"
+		Category.SPACE: return "Weltraum"
+		Category.MARKET_CRASH: return "MARKTCRASH"
+		_: return "Allgemein"
+
+# ==============================================================================
+# CRISIS EFFECT APPLICATION
+# ==============================================================================
+
+func _apply_crisis_effect(event: Dictionary):
+	if game_manager == null:
+		return
+	
+	var effect = event.get("effect", {})
+	var crisis_level = event.get("crisis_level", CrisisLevel.NONE)
+	var duration = event.get("duration", 6)
+	
+	# Set crisis state
+	current_crisis_level = crisis_level
+	crisis_duration_months = duration
+	game_manager.set_meta("crisis_active", true)
+	
+	# Apply price effect
+	if effect.has("oil_price_mult"):
+		var mult = effect["oil_price_mult"]
+		# Handle negative prices (2020 event)
+		if mult < 0:
+			# Negative price - you have to PAY to get rid of oil!
+			game_manager.price_multiplier = 0.01  # Almost zero
+			unsellable_oil_percent = 0.7  # 70% unsellable
+		else:
+			game_manager.price_multiplier *= mult
+	
+	# Apply demand effect
+	if effect.has("demand"):
+		game_manager.set_meta("demand_modifier", effect["demand"])
+	
+	# Apply unsellable oil percentage
+	if effect.has("unsellable"):
+		unsellable_oil_percent = max(unsellable_oil_percent, effect["unsellable"])
+	
+	# Emit market crash signal for severe events
+	if crisis_level >= CrisisLevel.SEVERE:
+		market_crash.emit(mult if effect.has("oil_price_mult") else 0.5)
+	
+	# Apply additional effects
+	_apply_event_effect(effect)
+
+func _apply_event_effect(effect: Dictionary):
+	if game_manager == null:
+		return
+	
+	# Oil price multiplier
+	if effect.has("oil_price_mult"):
+		var mult = effect["oil_price_mult"]
+		if mult > 0:
+			game_manager.price_multiplier *= mult
+	
+	# Inflation
+	if effect.has("inflation"):
+		game_manager.inflation_rate *= effect["inflation"]
+	
+	# Region blocked
+	if effect.has("region_blocked"):
+		if game_manager.regions.has(effect["region_blocked"]):
+			game_manager.regions[effect["region_blocked"]]["block_timer"] = 6
+	
+	# Tech discount
+	if effect.has("tech_discount"):
+		var current = game_manager.get_meta("temp_tech_discount", 0.0)
+		game_manager.set_meta("temp_tech_discount", current + effect["tech_discount"])
+	
+	# Demand modifier
+	if effect.has("demand"):
+		var current = game_manager.get_meta("demand_modifier", 1.0)
+		game_manager.set_meta("demand_modifier", current * effect["demand"])
+	
+	# Safety costs
+	if effect.has("safety_costs"):
+		var current = game_manager.get_meta("safety_cost_mult", 1.0)
+		game_manager.set_meta("safety_cost_mult", current * effect["safety_costs"])
+	
+	# Unsellable oil (can be from non-crisis events too)
+	if effect.has("unsellable"):
+		unsellable_oil_percent = max(unsellable_oil_percent, effect["unsellable"])
+	
+	# Production modifier
+	if effect.has("production"):
+		var current = game_manager.get_meta("production_mult", 1.0)
+		game_manager.set_meta("production_mult", current * effect["production"])
+	
+	# Transport costs
+	if effect.has("transport"):
+		var current = game_manager.get_meta("transport_mult", 1.0)
+		game_manager.set_meta("transport_mult", current * effect["transport"])
+
+# ==============================================================================
+# COMPANY NEWS GENERATION
+# ==============================================================================
+
+func _generate_company_news() -> Array:
+	var news = []
+	if game_manager == null:
+		return news
+	
+	var company = game_manager.company_name
+	if company == "":
+		company = "Ihre Firma"
+	
+	# Crisis-specific company news
+	if current_crisis_level >= CrisisLevel.SEVERE:
+		if randf() < 0.5:
+			var template = COMPANY_FAILURE_TEMPLATES[4]  # "MUSS RIGS ABSTELLEN"
+			news.append({
+				"title": template["title"] % company,
+				"text": template["text"] % company,
+				"category": Category.COMPANY_NEWS,
+				"important": false
+			})
+	
+	# Success news based on performance
+	if game_manager.cash > 10000000 and randf() < 0.3:
+		var template = COMPANY_SUCCESS_TEMPLATES[0]
+		news.append({
+			"title": template["title"] % company,
+			"text": template["text"] % company,
+			"category": Category.COMPANY_NEWS,
+			"important": false
+		})
+	
+	# Failure news if things are going badly
+	if game_manager.cash < 500000 and game_manager.cash > 0:
+		var template = COMPANY_FAILURE_TEMPLATES.pick_random()
+		news.append({
+			"title": template["title"] % company,
+			"text": template["text"] % company,
+			"category": Category.COMPANY_NEWS,
+			"important": false
+		})
+	
+	return news
+
+# ==============================================================================
+# AUTO-SHOW AND GETTERS
+# ==============================================================================
+
+func should_auto_show_news() -> bool:
+	return has_important_news or pending_news.size() > 0
+
+func get_pending_news() -> Array:
+	var news = pending_news.duplicate()
+	pending_news.clear()
+	has_important_news = false
+	return news
+
+func clear_pending_news():
+	pending_news.clear()
+	has_important_news = false
+
+func get_current_headlines() -> Array:
+	return current_headlines
+
+func get_history_headlines(count: int = 20) -> Array:
+	var start = max(0, newspaper_history.size() - count)
+	return newspaper_history.slice(start)
+
+# ==============================================================================
+# MEDIA TYPE DETECTION
+# ==============================================================================
+
 func get_current_media_type() -> int:
 	if game_manager == null:
 		return MediaType.NEWSPAPER_1970S
@@ -268,7 +647,6 @@ func get_current_media_type() -> int:
 	var year = game_manager.date["year"]
 	var era = game_manager.current_era
 	
-	# Check by era first (for upgraded systems)
 	match era:
 		0: return MediaType.NEWSPAPER_1970S
 		1: return MediaType.NEWSPAPER_1980S
@@ -294,170 +672,10 @@ func get_media_type_name() -> String:
 		MediaType.ONLINE_PORTAL_2000S: return "OilNN.com"
 		_: return "NEWS"
 
-# --- MONTHLY NEWS GENERATION ---
-func check_monthly_events():
-	if game_manager == null:
-		return []
-	
-	current_headlines.clear()
-	has_important_news = false
-	var year = game_manager.date["year"]
-	var month = game_manager.date["month"]
-	
-	# 1. Check historical oil events
-	for event in HISTORICAL_OIL_EVENTS:
-		var event_key = "oil_%d_%d" % [event["year"], event["month"]]
-		if not triggered_events.has(event_key):
-			if year == event["year"] and month == event["month"]:
-				triggered_events[event_key] = true
-				var headline = _create_headline_from_event(event)
-				current_headlines.append(headline)
-				if event.get("important", false):
-					has_important_news = true
-					pending_news.append(headline)
-				_apply_event_effect(event.get("effect", {}))
-	
-	# 2. Check world events
-	for event in WORLD_EVENTS:
-		var event_key = "world_%d_%d" % [event["year"], event["month"]]
-		if not triggered_events.has(event_key):
-			if year == event["year"] and month == event["month"]:
-				triggered_events[event_key] = true
-				var headline = _create_headline_from_event(event)
-				current_headlines.append(headline)
-				if event.get("important", false):
-					has_important_news = true
-				_apply_event_effect(event.get("effect", {}))
-	
-	# 3. Generate random world event (15% chance)
-	if randf() < 0.15:
-		var event = RANDOM_WORLD_EVENTS.pick_random()
-		var headline = _create_headline_from_event(event)
-		current_headlines.append(headline)
-		_apply_event_effect(event.get("effect", {}))
-	
-	# 4. Generate company-specific news
-	current_headlines.append_array(_generate_company_news())
-	
-	# 5. Store headlines with date
-	for headline in current_headlines:
-		headline["date"] = "%02d/%d" % [month, year]
-		newspaper_history.append(headline)
-		news_published.emit(headline["title"], _category_to_string(headline["category"]), headline.get("important", false))
-	
-	return current_headlines
+# ==============================================================================
+# NEWS DISPLAY CREATION
+# ==============================================================================
 
-func _create_headline_from_event(event: Dictionary) -> Dictionary:
-	return {
-		"title": event["title"],
-		"text": event["text"],
-		"category": event["category"],
-		"effect": event.get("effect", {}),
-		"important": event.get("important", false)
-	}
-
-func _category_to_string(cat: int) -> String:
-	match cat:
-		Category.OIL_DISCOVERY: return "Oel-Entdeckung"
-		Category.OIL_CRISIS: return "Oelkrise"
-		Category.OPEC_NEWS: return "OPEC"
-		Category.COMPANY_NEWS: return "Firmen-News"
-		Category.MARKET_NEWS: return "Markt"
-		Category.WORLD_POLITICS: return "Weltpolitik"
-		Category.TECHNOLOGY: return "Technologie"
-		Category.CULTURE: return "Kultur"
-		Category.SPORTS: return "Sport"
-		Category.DISASTERS: return "Katastrophen"
-		Category.ECONOMY: return "Wirtschaft"
-		Category.SPACE: return "Weltraum"
-		_: return "Allgemein"
-
-# --- APPLY GAMEPLAY EFFECTS ---
-func _apply_event_effect(effect: Dictionary):
-	if game_manager == null:
-		return
-	
-	# Oil price multiplier
-	if effect.has("oil_price_mult"):
-		game_manager.price_multiplier *= effect["oil_price_mult"]
-	
-	# Inflation
-	if effect.has("inflation"):
-		game_manager.inflation_rate *= effect["inflation"]
-	
-	# Region blocked
-	if effect.has("region_blocked"):
-		if game_manager.regions.has(effect["region_blocked"]):
-			game_manager.regions[effect["region_blocked"]]["block_timer"] = 6
-	
-	# Tech discount (temporary, stored in game_manager)
-	if effect.has("tech_discount"):
-		if not game_manager.has("temp_tech_discount"):
-			game_manager.set_meta("temp_tech_discount", 0.0)
-		var current = game_manager.get_meta("temp_tech_discount", 0.0)
-		game_manager.set_meta("temp_tech_discount", current + effect["tech_discount"])
-	
-	# Demand modifier
-	if effect.has("demand"):
-		if not game_manager.has("demand_modifier"):
-			game_manager.set_meta("demand_modifier", 1.0)
-		var current = game_manager.get_meta("demand_modifier", 1.0)
-		game_manager.set_meta("demand_modifier", current * effect["demand"])
-	
-	# Safety costs
-	if effect.has("safety_costs"):
-		if not game_manager.has("safety_cost_mult"):
-			game_manager.set_meta("safety_cost_mult", 1.0)
-		var current = game_manager.get_meta("safety_cost_mult", 1.0)
-		game_manager.set_meta("safety_cost_mult", current * effect["safety_costs"])
-
-# --- COMPANY NEWS GENERATION ---
-func _generate_company_news() -> Array:
-	var news = []
-	if game_manager == null:
-		return news
-	
-	var company = game_manager.company_name
-	if company == "":
-		company = "Ihre Firma"
-	
-	# Success news based on performance
-	if game_manager.cash > 5000000:
-		var template = COMPANY_SUCCESS_TEMPLATES[0]
-		news.append({
-			"title": template["title"] % company,
-			"text": template["text"] % company,
-			"category": Category.COMPANY_NEWS,
-			"important": false
-		})
-	
-	# Failure news if things are going badly
-	if game_manager.cash < 1000000 and game_manager.cash > 0:
-		var template = COMPANY_FAILURE_TEMPLATES[4] if COMPANY_FAILURE_TEMPLATES.size() > 4 else COMPANY_FAILURE_TEMPLATES[0]
-		news.append({
-			"title": template["title"] % company,
-			"text": template["text"] % company,
-			"category": Category.COMPANY_NEWS,
-			"important": false
-		})
-	
-	return news
-
-# --- CHECK IF SHOULD AUTO-SHOW ---
-func should_auto_show_news() -> bool:
-	return has_important_news or pending_news.size() > 0
-
-func get_pending_news() -> Array:
-	var news = pending_news.duplicate()
-	pending_news.clear()
-	has_important_news = false
-	return news
-
-func clear_pending_news():
-	pending_news.clear()
-	has_important_news = false
-
-# --- CREATE NEWS DISPLAY ---
 func create_news_display() -> Control:
 	var media_type = get_current_media_type()
 	
@@ -473,14 +691,16 @@ func create_news_display() -> Control:
 		_:
 			return _create_newspaper_1970s()
 
-# --- 1970s NEWSPAPER LAYOUT ---
+# ==============================================================================
+# 1970s NEWSPAPER LAYOUT
+# ==============================================================================
+
 func _create_newspaper_1970s() -> Control:
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(700, 900)
 	
-	# Old paper style
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.95, 0.92, 0.85)  # Aged paper
+	style.bg_color = Color(0.95, 0.92, 0.85)
 	style.border_color = Color(0.3, 0.25, 0.2)
 	style.set_border_width_all(4)
 	style.set_corner_radius_all(2)
@@ -490,105 +710,105 @@ func _create_newspaper_1970s() -> Control:
 	main_vbox.add_theme_constant_override("separation", 8)
 	panel.add_child(main_vbox)
 	
-	# Masthead
-	var masthead_box = HBoxContainer.new()
-	main_vbox.add_child(masthead_box)
+	# Crisis warning banner if in crisis
+	if current_crisis_level >= CrisisLevel.SEVERE:
+		var crisis_banner = _create_crisis_banner()
+		main_vbox.add_child(crisis_banner)
 	
+	# Masthead
 	var masthead = Label.new()
 	masthead.text = "═══════ THE DAILY BARREL ═══════"
 	masthead.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	masthead.add_theme_font_size_override("font_size", 32)
 	masthead.add_theme_color_override("font_color", Color(0.15, 0.1, 0.05))
-	masthead.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	masthead_box.add_child(masthead)
+	main_vbox.add_child(masthead)
 	
-	# Date line
+	# Date line with crisis indicator
 	var date_line = Label.new()
 	if game_manager:
-		date_line.text = "Vol. %d  |  %s %d  |  Oel: $%.2f/Fass  |  Preis: $%.0f" % [
+		var crisis_text = ""
+		if current_crisis_level >= CrisisLevel.MODERATE:
+			crisis_text = " | !!! MARKTKRISE !!!"
+		date_line.text = "Vol. %d | %s %d | Oel: $%.2f%s" % [
 			game_manager.date["year"] - 1969,
 			_get_month_name(game_manager.date["month"]),
 			game_manager.date["year"],
 			game_manager.oil_price,
-			game_manager.cash
+			crisis_text
 		]
 	date_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	date_line.add_theme_font_size_override("font_size", 11)
 	date_line.add_theme_color_override("font_color", Color(0.3, 0.25, 0.2))
 	main_vbox.add_child(date_line)
 	
-	# Separator line
+	# Separator
 	var sep1 = HSeparator.new()
 	sep1.add_theme_stylebox_override("separator", _create_black_line())
 	main_vbox.add_child(sep1)
 	
-	# Important news banner (if any)
+	# Important headlines
 	var important_headlines = current_headlines.filter(func(h): return h.get("important", false))
 	if important_headlines.size() > 0:
-		var banner = _create_headline_banner(important_headlines[0])
-		main_vbox.add_child(banner)
-		
-		var sep2 = HSeparator.new()
-		sep2.add_theme_stylebox_override("separator", _create_black_line())
-		main_vbox.add_child(sep2)
+		for headline in important_headlines:
+			var banner = _create_headline_banner(headline)
+			main_vbox.add_child(banner)
+			var sep = HSeparator.new()
+			sep.add_theme_stylebox_override("separator", _create_black_line())
+			main_vbox.add_child(sep)
 	
 	# Scrollable content
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.custom_minimum_size.y = 600
+	scroll.custom_minimum_size.y = 500
 	main_vbox.add_child(scroll)
 	
 	var content_vbox = VBoxContainer.new()
 	content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_vbox.add_theme_constant_override("separation", 12)
+	content_vbox.add_theme_constant_override("separation", 10)
 	scroll.add_child(content_vbox)
 	
-	# Two-column layout for regular news
-	var columns = HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 15)
-	content_vbox.add_child(columns)
-	
-	var left_col = VBoxContainer.new()
-	left_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_col.add_theme_constant_override("separation", 10)
-	columns.add_child(left_col)
-	
-	var right_col = VBoxContainer.new()
-	right_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_col.add_theme_constant_override("separation", 10)
-	columns.add_child(right_col)
-	
-	# Add headlines to columns
+	# Regular headlines
 	var regular_headlines = current_headlines.filter(func(h): return not h.get("important", false))
-	for i in range(regular_headlines.size()):
-		var item = _create_headline_item_newspaper(regular_headlines[i])
-		if i % 2 == 0:
-			left_col.add_child(item)
-		else:
-			right_col.add_child(item)
-	
-	# Footer
-	var footer = Label.new()
-	footer.text = "═══════════════════════════════════════════════════════════════"
-	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_theme_color_override("font_color", Color(0.3, 0.25, 0.2))
-	main_vbox.add_child(footer)
-	
-	# Copyright
-	var copyright = Label.new()
-	copyright.text = "© 1970s The Daily Barrel - Alle Rechte vorbehalten"
-	copyright.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	copyright.add_theme_font_size_override("font_size", 9)
-	copyright.add_theme_color_override("font_color", Color(0.4, 0.35, 0.3))
-	main_vbox.add_child(copyright)
+	for headline in regular_headlines:
+		var item = _create_headline_item_newspaper(headline)
+		content_vbox.add_child(item)
 	
 	return panel
+
+func _create_crisis_banner() -> Control:
+	var banner = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.6, 0.1, 0.1)
+	banner.add_theme_stylebox_override("panel", style)
+	
+	var label = Label.new()
+	match current_crisis_level:
+		CrisisLevel.SEVERE:
+			label.text = "!!! SCHWERE MARKTKRISE - ÖL KAUM VERKÄUFLICH !!!"
+		CrisisLevel.CATASTROPHIC:
+			label.text = "!!! MARKTZUSAMMENBRUCH - NEGATIVE PREISE !!!"
+		_:
+			label.text = "!!! MARKTTURBULENZEN !!!"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	banner.add_child(label)
+	
+	return banner
 
 func _create_headline_banner(headline: Dictionary) -> Control:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 5)
 	
-	# Category tag
+	# Crisis indicator for crash headlines
+	if headline.get("crisis_level", CrisisLevel.NONE) >= CrisisLevel.SEVERE:
+		var crisis_label = Label.new()
+		crisis_label.text = "【 MARKTCRASH 】"
+		crisis_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		crisis_label.add_theme_font_size_override("font_size", 14)
+		crisis_label.add_theme_color_override("font_color", Color(0.7, 0.1, 0.1))
+		vbox.add_child(crisis_label)
+	
 	var cat_label = Label.new()
 	cat_label.text = "[ " + _category_to_string(headline["category"]).to_upper() + " ]"
 	cat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -596,23 +816,19 @@ func _create_headline_banner(headline: Dictionary) -> Control:
 	cat_label.add_theme_color_override("font_color", Color(0.6, 0.1, 0.1))
 	vbox.add_child(cat_label)
 	
-	# Main headline
 	var title = Label.new()
 	title.text = headline["title"]
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color(0.1, 0.05, 0.0))
-	title.add_theme_font_size_override("outline_size", 1)
-	title.add_theme_color_override("font_outline_color", Color(0.8, 0.75, 0.7))
 	vbox.add_child(title)
 	
-	# Story text
 	var text = Label.new()
 	text.text = headline["text"]
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD
-	text.add_theme_font_size_override("font_size", 14)
+	text.add_theme_font_size_override("font_size", 13)
 	text.add_theme_color_override("font_color", Color(0.2, 0.15, 0.1))
 	vbox.add_child(text)
 	
@@ -622,7 +838,6 @@ func _create_headline_item_newspaper(headline: Dictionary) -> Control:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 3)
 	
-	# Title
 	var title = Label.new()
 	title.text = headline["title"]
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
@@ -630,7 +845,6 @@ func _create_headline_item_newspaper(headline: Dictionary) -> Control:
 	title.add_theme_color_override("font_color", _get_category_color(headline["category"]))
 	vbox.add_child(title)
 	
-	# Text
 	var text = Label.new()
 	text.text = headline["text"]
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD
@@ -638,34 +852,39 @@ func _create_headline_item_newspaper(headline: Dictionary) -> Control:
 	text.add_theme_color_override("font_color", Color(0.25, 0.2, 0.15))
 	vbox.add_child(text)
 	
-	# Thin separator
 	var sep = HSeparator.new()
 	sep.add_theme_stylebox_override("separator", _create_thin_line())
 	vbox.add_child(sep)
 	
 	return vbox
 
-# --- 1980s NEWSPAPER LAYOUT (Color version) ---
+# ==============================================================================
+# 1980s NEWSPAPER LAYOUT
+# ==============================================================================
+
 func _create_newspaper_1980s() -> Control:
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(750, 950)
 	
-	# Brighter paper style
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.98, 0.96, 0.92)  # Brighter paper
+	style.bg_color = Color(0.98, 0.96, 0.92)
 	style.border_color = Color(0.2, 0.2, 0.3)
 	style.set_border_width_all(3)
-	style.set_corner_radius_all(3)
 	panel.add_theme_stylebox_override("panel", style)
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(main_vbox)
 	
-	# Colorful masthead
+	# Crisis warning
+	if current_crisis_level >= CrisisLevel.SEVERE:
+		var crisis_banner = _create_80s_crisis_banner()
+		main_vbox.add_child(crisis_banner)
+	
+	# Masthead
 	var masthead_bg = PanelContainer.new()
 	var masthead_style = StyleBoxFlat.new()
-	masthead_style.bg_color = Color(0.1, 0.15, 0.35)  # Dark blue
+	masthead_style.bg_color = Color(0.1, 0.15, 0.35)
 	masthead_bg.add_theme_stylebox_override("panel", masthead_style)
 	main_vbox.add_child(masthead_bg)
 	
@@ -673,47 +892,45 @@ func _create_newspaper_1980s() -> Control:
 	masthead.text = "★ THE DAILY BARREL ★"
 	masthead.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	masthead.add_theme_font_size_override("font_size", 36)
-	masthead.add_theme_color_override("font_color", Color(1, 0.9, 0.2))  # Gold
+	masthead.add_theme_color_override("font_color", Color(1, 0.9, 0.2))
 	masthead_bg.add_child(masthead)
 	
-	# Date with colored background
+	# Date line
 	var date_box = PanelContainer.new()
 	var date_style = StyleBoxFlat.new()
-	date_style.bg_color = Color(0.8, 0.1, 0.1)  # Red
+	date_style.bg_color = Color(0.8, 0.1, 0.1) if current_crisis_level >= CrisisLevel.MODERATE else Color(0.7, 0.1, 0.1)
 	date_box.add_theme_stylebox_override("panel", date_style)
 	main_vbox.add_child(date_box)
 	
 	var date_line = Label.new()
 	if game_manager:
-		date_line.text = "  %s %d | OELPREIS: $%.2f | IHRE KASSE: $%.0f  " % [
+		date_line.text = "  %s %d | OEL: $%.2f | KRISE: %d%%  " % [
 			_get_month_name(game_manager.date["month"]),
 			game_manager.date["year"],
 			game_manager.oil_price,
-			game_manager.cash
+			int(unsellable_oil_percent * 100)
 		]
 	date_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	date_line.add_theme_font_size_override("font_size", 13)
 	date_line.add_theme_color_override("font_color", Color.WHITE)
 	date_box.add_child(date_line)
 	
-	# Scrollable content
+	# Content
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.custom_minimum_size.y = 700
 	main_vbox.add_child(scroll)
 	
 	var content_vbox = VBoxContainer.new()
-	content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_vbox.add_theme_constant_override("separation", 15)
+	content_vbox.add_theme_constant_override("separation", 12)
 	scroll.add_child(content_vbox)
 	
-	# Breaking news box
+	# Breaking news
 	var important_headlines = current_headlines.filter(func(h): return h.get("important", false))
 	if important_headlines.size() > 0:
-		var breaking_box = _create_80s_breaking_box(important_headlines[0])
-		content_vbox.add_child(breaking_box)
+		for headline in important_headlines:
+			var breaking_box = _create_80s_breaking_box(headline)
+			content_vbox.add_child(breaking_box)
 	
-	# Headlines with photos placeholder
 	for headline in current_headlines:
 		if not headline.get("important", false):
 			var item = _create_headline_item_80s(headline)
@@ -721,30 +938,52 @@ func _create_newspaper_1980s() -> Control:
 	
 	return panel
 
+func _create_80s_crisis_banner() -> Control:
+	var banner = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.8, 0.2, 0.1)
+	banner.add_theme_stylebox_override("panel", style)
+	
+	var hbox = HBoxContainer.new()
+	banner.add_child(hbox)
+	
+	var icon = Label.new()
+	icon.text = "⚠️"
+	icon.add_theme_font_size_override("font_size", 20)
+	hbox.add_child(icon)
+	
+	var label = Label.new()
+	label.text = "MARKTKRISE! %d%% IHRES ÖLS IST AKTUELL UNVERKÄUFLICH!" % int(unsellable_oil_percent * 100)
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	hbox.add_child(label)
+	
+	return banner
+
 func _create_80s_breaking_box(headline: Dictionary) -> Control:
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
 	
-	# Breaking banner
+	var is_crisis = headline.get("crisis_level", CrisisLevel.NONE) >= CrisisLevel.SEVERE
+	
 	var banner_bg = PanelContainer.new()
 	var banner_style = StyleBoxFlat.new()
-	banner_style.bg_color = Color(0.9, 0.2, 0.1)
+	banner_style.bg_color = Color(0.9, 0.2, 0.1) if is_crisis else Color(0.9, 0.2, 0.1)
 	banner_bg.add_theme_stylebox_override("panel", banner_style)
 	vbox.add_child(banner_bg)
 	
 	var banner = Label.new()
-	banner.text = "⚡ BREAKING NEWS ⚡"
+	banner.text = "⚡ BREAKING: " + _category_to_string(headline["category"]).to_upper() + " ⚡"
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	banner.add_theme_font_size_override("font_size", 18)
+	banner.add_theme_font_size_override("font_size", 16)
 	banner.add_theme_color_override("font_color", Color.WHITE)
 	banner_bg.add_child(banner)
 	
-	# Content box
 	var content_bg = PanelContainer.new()
 	var content_style = StyleBoxFlat.new()
 	content_style.bg_color = Color(0.95, 0.95, 0.9)
 	content_style.set_border_width_all(2)
-	content_style.border_color = Color(0.9, 0.2, 0.1)
+	content_style.border_color = Color(0.9, 0.2, 0.1) if is_crisis else Color(0.9, 0.2, 0.1)
 	content_bg.add_theme_stylebox_override("panel", content_style)
 	vbox.add_child(content_bg)
 	
@@ -755,14 +994,14 @@ func _create_80s_breaking_box(headline: Dictionary) -> Control:
 	var title = Label.new()
 	title.text = headline["title"]
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_color_override("font_color", Color(0.1, 0.1, 0.2))
 	content.add_child(title)
 	
 	var text = Label.new()
 	text.text = headline["text"]
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD
-	text.add_theme_font_size_override("font_size", 13)
+	text.add_theme_font_size_override("font_size", 12)
 	text.add_theme_color_override("font_color", Color(0.2, 0.2, 0.25))
 	content.add_child(text)
 	
@@ -772,15 +1011,13 @@ func _create_headline_item_80s(headline: Dictionary) -> Control:
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
 	
-	# Color indicator
 	var indicator = PanelContainer.new()
-	indicator.custom_minimum_size = Vector2(5, 60)
+	indicator.custom_minimum_size = Vector2(5, 50)
 	var ind_style = StyleBoxFlat.new()
 	ind_style.bg_color = _get_category_color(headline["category"])
 	indicator.add_theme_stylebox_override("panel", ind_style)
 	hbox.add_child(indicator)
 	
-	# Content
 	var vbox = VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 3)
@@ -789,7 +1026,7 @@ func _create_headline_item_80s(headline: Dictionary) -> Control:
 	var title = Label.new()
 	title.text = headline["title"]
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
-	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_font_size_override("font_size", 14)
 	title.add_theme_color_override("font_color", Color(0.1, 0.1, 0.15))
 	vbox.add_child(title)
 	
@@ -800,21 +1037,16 @@ func _create_headline_item_80s(headline: Dictionary) -> Control:
 	text.add_theme_color_override("font_color", Color(0.3, 0.3, 0.35))
 	vbox.add_child(text)
 	
-	# Category tag
-	var cat = Label.new()
-	cat.text = _category_to_string(headline["category"])
-	cat.add_theme_font_size_override("font_size", 9)
-	cat.add_theme_color_override("font_color", Color(0.5, 0.5, 0.55))
-	vbox.add_child(cat)
-	
 	return hbox
 
-# --- 1990s TV NEWS LAYOUT ---
+# ==============================================================================
+# 1990s TV NEWS LAYOUT
+# ==============================================================================
+
 func _create_tv_news() -> Control:
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(800, 600)
 	
-	# Dark TV style
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.05, 0.1)
 	style.border_color = Color(0.3, 0.3, 0.3)
@@ -824,10 +1056,10 @@ func _create_tv_news() -> Control:
 	var main_vbox = VBoxContainer.new()
 	panel.add_child(main_vbox)
 	
-	# OilNN Header bar
+	# OilNN Header
 	var header_bg = PanelContainer.new()
 	var header_style = StyleBoxFlat.new()
-	header_style.bg_color = Color(0.8, 0.1, 0.1)  # Red news banner
+	header_style.bg_color = Color(0.8, 0.1, 0.1) if current_crisis_level >= CrisisLevel.MODERATE else Color(0.8, 0.1, 0.1)
 	header_bg.add_theme_stylebox_override("panel", header_style)
 	main_vbox.add_child(header_bg)
 	
@@ -838,28 +1070,22 @@ func _create_tv_news() -> Control:
 	logo.text = " OilNN "
 	logo.add_theme_font_size_override("font_size", 28)
 	logo.add_theme_color_override("font_color", Color.WHITE)
-	logo.add_theme_font_size_override("outline_size", 2)
-	logo.add_theme_color_override("font_outline_color", Color(0.2, 0.2, 0.8))
 	header_hbox.add_child(logo)
 	
-	var live = Label.new()
-	live.text = " ● LIVE"
-	live.add_theme_font_size_override("font_size", 18)
-	live.add_theme_color_override("font_color", Color.RED)
-	header_hbox.add_child(live)
+	if current_crisis_level >= CrisisLevel.SEVERE:
+		var breaking = Label.new()
+		breaking.text = " ● MARKTCRISE LIVE"
+		breaking.add_theme_font_size_override("font_size", 18)
+		breaking.add_theme_color_override("font_color", Color.YELLOW)
+		header_hbox.add_child(breaking)
+	else:
+		var live = Label.new()
+		live.text = " ● LIVE"
+		live.add_theme_font_size_override("font_size", 18)
+		live.add_theme_color_override("font_color", Color.RED)
+		header_hbox.add_child(live)
 	
-	var spacer = Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_hbox.add_child(spacer)
-	
-	var time_label = Label.new()
-	if game_manager:
-		time_label.text = " %s %d " % [_get_month_name(game_manager.date["month"]), game_manager.date["year"]]
-	time_label.add_theme_font_size_override("font_size", 16)
-	time_label.add_theme_color_override("font_color", Color.WHITE)
-	header_hbox.add_child(time_label)
-	
-	# Main content area
+	# Content area
 	var content_area = PanelContainer.new()
 	var content_style = StyleBoxFlat.new()
 	content_style.bg_color = Color(0.1, 0.1, 0.15)
@@ -868,28 +1094,29 @@ func _create_tv_news() -> Control:
 	main_vbox.add_child(content_area)
 	
 	var content_vbox = VBoxContainer.new()
-	content_vbox.add_theme_constant_override("separation", 15)
+	content_vbox.add_theme_constant_override("separation", 10)
 	content_area.add_child(content_vbox)
 	
-	# Breaking news ticker (animated)
-	if current_headlines.size() > 0 and current_headlines[0].get("important", false):
-		var ticker = _create_ticker(current_headlines[0])
+	# Breaking ticker
+	var important_headlines = current_headlines.filter(func(h): return h.get("important", false))
+	if important_headlines.size() > 0:
+		var ticker = _create_tv_ticker(important_headlines[0])
 		content_vbox.add_child(ticker)
 	
-	# News items in TV style
+	# News items
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_vbox.add_child(scroll)
 	
 	var news_list = VBoxContainer.new()
-	news_list.add_theme_constant_override("separation", 12)
+	news_list.add_theme_constant_override("separation", 10)
 	scroll.add_child(news_list)
 	
 	for headline in current_headlines:
 		var item = _create_tv_news_item(headline)
 		news_list.add_child(item)
 	
-	# Bottom ticker bar
+	# Bottom ticker
 	var ticker_bg = PanelContainer.new()
 	var ticker_style = StyleBoxFlat.new()
 	ticker_style.bg_color = Color(0.1, 0.2, 0.4)
@@ -898,11 +1125,10 @@ func _create_tv_news() -> Control:
 	
 	var ticker_text = Label.new()
 	if game_manager:
-		ticker_text.text = "OELPREIS: $%.2f/bbl  |  DOW JONES: %d  |  DOLLAR: %.2f DM  |  GOLDCHECK  |  WETTER: %s" % [
+		ticker_text.text = "OEL: $%.2f | UNVERKÄUFLICH: %d%% | DOW: %d | $" % [
 			game_manager.oil_price,
-			2000 + randi() % 8000,
-			2.5 + randf() * 0.5,
-			["SONNIG", "BEWOELKT", "REGEN", "STURM"].pick_random()
+			int(unsellable_oil_percent * 100),
+			2000 + randi() % 8000
 		]
 	ticker_text.add_theme_color_override("font_color", Color.WHITE)
 	ticker_text.add_theme_font_size_override("font_size", 12)
@@ -910,7 +1136,7 @@ func _create_tv_news() -> Control:
 	
 	return panel
 
-func _create_ticker(headline: Dictionary) -> Control:
+func _create_tv_ticker(headline: Dictionary) -> Control:
 	var ticker_bg = PanelContainer.new()
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.9, 0.1, 0.1)
@@ -937,7 +1163,6 @@ func _create_tv_news_item(headline: Dictionary) -> Control:
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 15)
 	
-	# Left indicator
 	var indicator = PanelContainer.new()
 	indicator.custom_minimum_size = Vector2(8, 50)
 	var ind_style = StyleBoxFlat.new()
@@ -945,7 +1170,6 @@ func _create_tv_news_item(headline: Dictionary) -> Control:
 	indicator.add_theme_stylebox_override("panel", ind_style)
 	hbox.add_child(indicator)
 	
-	# Content
 	var vbox = VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 4)
@@ -954,32 +1178,27 @@ func _create_tv_news_item(headline: Dictionary) -> Control:
 	var title = Label.new()
 	title.text = headline["title"]
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
-	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_font_size_override("font_size", 15)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(title)
 	
 	var text = Label.new()
 	text.text = headline["text"]
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD
-	text.add_theme_font_size_override("font_size", 12)
+	text.add_theme_font_size_override("font_size", 11)
 	text.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
 	vbox.add_child(text)
 	
-	# Category and time
-	var meta = Label.new()
-	meta.text = _category_to_string(headline["category"]) + " | " + headline.get("date", "")
-	meta.add_theme_font_size_override("font_size", 10)
-	meta.add_theme_color_override("font_color", Color(0.5, 0.6, 0.7))
-	vbox.add_child(meta)
-	
 	return hbox
 
-# --- 2000s ONLINE PORTAL LAYOUT ---
+# ==============================================================================
+# 2000s ONLINE PORTAL LAYOUT
+# ==============================================================================
+
 func _create_online_portal() -> Control:
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(850, 700)
 	
-	# Modern web style
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.98, 0.98, 1.0)
 	style.border_color = Color(0.8, 0.8, 0.85)
@@ -1007,20 +1226,26 @@ func _create_online_portal() -> Control:
 	logo.add_theme_color_override("font_color", Color.WHITE)
 	header_hbox.add_child(logo)
 	
-	var nav1 = Label.new()
-	nav1.text = "OEL  |  WELT  |  TECH  |  WIRTSCHAFT"
-	nav1.add_theme_font_size_override("font_size", 14)
-	nav1.add_theme_color_override("font_color", Color(0.7, 0.75, 0.9))
-	header_hbox.add_child(nav1)
+	if current_crisis_level >= CrisisLevel.SEVERE:
+		var crisis = Label.new()
+		crisis.text = "🔴 MARKTCRISE"
+		crisis.add_theme_font_size_override("font_size", 16)
+		crisis.add_theme_color_override("font_color", Color.RED)
+		header_hbox.add_child(crisis)
 	
-	# Search bar placeholder
-	var search = Label.new()
-	search.text = "🔍 Suchen..."
-	search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	search.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	search.add_theme_font_size_override("font_size", 13)
-	search.add_theme_color_override("font_color", Color(0.6, 0.65, 0.8))
-	header_hbox.add_child(search)
+	# Crisis alert bar
+	if current_crisis_level >= CrisisLevel.MODERATE:
+		var alert_bar = PanelContainer.new()
+		var alert_style = StyleBoxFlat.new()
+		alert_style.bg_color = Color(0.9, 0.2, 0.1)
+		alert_bar.add_theme_stylebox_override("panel", alert_style)
+		main_vbox.add_child(alert_bar)
+		
+		var alert_text = Label.new()
+		alert_text.text = "⚠️ ACHTUNG: %d%% Ihres Öls ist aktuell unverkäuflich! Preise auf Tiefststand!" % int(unsellable_oil_percent * 100)
+		alert_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		alert_text.add_theme_color_override("font_color", Color.WHITE)
+		alert_bar.add_child(alert_text)
 	
 	# Content grid
 	var grid = GridContainer.new()
@@ -1029,36 +1254,21 @@ func _create_online_portal() -> Control:
 	grid.add_theme_constant_override("v_separation", 15)
 	main_vbox.add_child(grid)
 	
-	# Featured story (spans 2 columns)
+	# Featured story
 	if current_headlines.size() > 0:
 		var featured = current_headlines[0] if current_headlines[0].get("important", false) else current_headlines.pick_random()
 		var featured_box = _create_web_featured(featured)
 		featured_box.custom_minimum_size = Vector2(500, 250)
 		grid.add_child(featured_box)
 		
-		# Trending sidebar
 		var trending = _create_trending_sidebar()
 		trending.custom_minimum_size = Vector2(200, 250)
 		grid.add_child(trending)
 	
-	# Regular news cards
 	for i in range(min(current_headlines.size() - 1, 6)):
 		var card = _create_news_card(current_headlines[i + 1])
 		card.custom_minimum_size = Vector2(250, 150)
 		grid.add_child(card)
-	
-	# Footer
-	var footer = PanelContainer.new()
-	var footer_style = StyleBoxFlat.new()
-	footer_style.bg_color = Color(0.15, 0.15, 0.2)
-	footer.add_theme_stylebox_override("panel", footer_style)
-	main_vbox.add_child(footer)
-	
-	var footer_text = Label.new()
-	footer_text.text = "© 2000+ OilNN.com | Alle Rechte vorbehalten | Impressum | Datenschutz"
-	footer_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer_text.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	footer.add_child(footer_text)
 	
 	return panel
 
@@ -1074,37 +1284,25 @@ func _create_web_featured(headline: Dictionary) -> Control:
 	vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(vbox)
 	
-	# Category badge
 	var badge = Label.new()
 	badge.text = " " + _category_to_string(headline["category"]).to_upper() + " "
 	badge.add_theme_font_size_override("font_size", 11)
 	badge.add_theme_color_override("font_color", Color.WHITE)
-	badge.add_theme_font_size_override("outline_size", 1)
-	badge.add_theme_color_override("font_outline_color", _get_category_color(headline["category"]))
 	vbox.add_child(badge)
 	
-	# Title
 	var title = Label.new()
 	title.text = headline["title"]
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
-	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", Color(0.1, 0.1, 0.15))
 	vbox.add_child(title)
 	
-	# Text
 	var text = Label.new()
 	text.text = headline["text"]
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD
-	text.add_theme_font_size_override("font_size", 13)
+	text.add_theme_font_size_override("font_size", 12)
 	text.add_theme_color_override("font_color", Color(0.3, 0.3, 0.4))
 	vbox.add_child(text)
-	
-	# Meta
-	var meta = Label.new()
-	meta.text = headline.get("date", "") + " | 5 Min. Lesezeit"
-	meta.add_theme_font_size_override("font_size", 10)
-	meta.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	vbox.add_child(meta)
 	
 	return panel
 
@@ -1121,7 +1319,6 @@ func _create_news_card(headline: Dictionary) -> Control:
 	vbox.add_theme_constant_override("separation", 5)
 	panel.add_child(vbox)
 	
-	# Color bar
 	var bar = PanelContainer.new()
 	bar.custom_minimum_size.y = 4
 	var bar_style = StyleBoxFlat.new()
@@ -1132,15 +1329,9 @@ func _create_news_card(headline: Dictionary) -> Control:
 	var title = Label.new()
 	title.text = headline["title"]
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", Color(0.15, 0.15, 0.2))
 	vbox.add_child(title)
-	
-	var cat = Label.new()
-	cat.text = _category_to_string(headline["category"])
-	cat.add_theme_font_size_override("font_size", 9)
-	cat.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	vbox.add_child(cat)
 	
 	return panel
 
@@ -1160,17 +1351,28 @@ func _create_trending_sidebar() -> Control:
 	trending_label.add_theme_color_override("font_color", Color.YELLOW)
 	vbox.add_child(trending_label)
 	
-	var topics = ["Oelpreis steigt", "Neue Bohrtechnik", "OPEC-Tagung", "Umweltauflagen", "Tech-Boom"]
+	if current_crisis_level >= CrisisLevel.MODERATE:
+		var crisis_topic = Label.new()
+		crisis_topic.text = "1. Oelpreis-Crash"
+		crisis_topic.add_theme_font_size_override("font_size", 11)
+		crisis_topic.add_theme_color_override("font_color", Color.RED)
+		vbox.add_child(crisis_topic)
+	
+	var topics = ["OPEC-Tagung", "Boersen-Crash", "Umwelt-Gesetze", "Tech-Boom", "Elektroautos"]
+	var start = 2 if current_crisis_level >= CrisisLevel.MODERATE else 1
 	for i in range(topics.size()):
 		var topic = Label.new()
-		topic.text = "%d. %s" % [i + 1, topics[i]]
+		topic.text = "%d. %s" % [start + i, topics[i]]
 		topic.add_theme_font_size_override("font_size", 11)
 		topic.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95))
 		vbox.add_child(topic)
 	
 	return panel
 
-# --- HELPER FUNCTIONS ---
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+
 func _get_category_color(category: int) -> Color:
 	match category:
 		Category.OIL_DISCOVERY: return Color(0.1, 0.5, 0.2)
@@ -1185,6 +1387,7 @@ func _get_category_color(category: int) -> Color:
 		Category.DISASTERS: return Color(0.6, 0.3, 0.1)
 		Category.ECONOMY: return Color(0.3, 0.5, 0.3)
 		Category.SPACE: return Color(0.3, 0.3, 0.6)
+		Category.MARKET_CRASH: return Color(0.8, 0.1, 0.1)
 		_: return Color(0.3, 0.3, 0.3)
 
 func _get_month_name(month: int) -> String:
@@ -1204,21 +1407,22 @@ func _create_thin_line() -> StyleBoxFlat:
 	style.content_margin_top = 1
 	return style
 
-# --- GETTERS ---
-func get_current_headlines() -> Array:
-	return current_headlines
+# ==============================================================================
+# SAVE/LOAD
+# ==============================================================================
 
-func get_history_headlines(count: int = 20) -> Array:
-	var start = max(0, newspaper_history.size() - count)
-	return newspaper_history.slice(start)
-
-# --- SAVE/LOAD ---
 func get_save_data() -> Dictionary:
 	return {
 		"history": newspaper_history,
-		"triggered_events": triggered_events
+		"triggered_events": triggered_events,
+		"crisis_level": current_crisis_level,
+		"crisis_duration": crisis_duration_months,
+		"unsellable_percent": unsellable_oil_percent
 	}
 
 func load_save_data(data: Dictionary):
 	newspaper_history = data.get("history", [])
 	triggered_events = data.get("triggered_events", {})
+	current_crisis_level = data.get("crisis_level", CrisisLevel.NONE)
+	crisis_duration_months = data.get("crisis_duration", 0)
+	unsellable_oil_percent = data.get("unsellable_percent", 0.0)
