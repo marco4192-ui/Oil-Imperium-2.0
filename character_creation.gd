@@ -8,10 +8,14 @@ extends Control
 @onready var office_label = $MainContainer/SelctorsBox/RightColumn/OfficeControls/OfficeNameLabel
 
 @onready var hq_label = $MainContainer/SelctorsBox/RightColumn2/HQControls/HQNameLabel
-@onready var hq_display = $MainContainer/SelctorsBox/RightColumn2/HQDisplay 
+@onready var hq_display = $MainContainer/SelctorsBox/RightColumn2/HQDisplay
 @onready var name_input = $MainContainer/InputBox/NameInput
 
-@onready var btn_load = $BtnLoad 
+@onready var btn_load = $BtnLoad
+
+# Story Mode UI
+var story_mode_check: CheckBox = null
+var difficulty_option: OptionButton = null
 
 # Load Menu
 var load_popup: PopupMenu
@@ -22,14 +26,98 @@ var current_logo_idx = 0
 var current_office_idx = 0
 var current_hq_idx = 0
 var tutorial_enabled = true  # Default to enabled for new players
+var story_mode_enabled = false  # Story Mode - narrative events
+var difficulty_level = 1  # 0=Easy, 1=Normal, 2=Hard, 3=Brutal
 
 func _ready():
         # Daten aus GameData holen
         if GameManager and GameManager.GameData:
                 logos = GameManager.GameData.COMPANIES
-        
+
         create_load_popup()
+        _create_story_mode_ui()
         update_ui()
+
+func _create_story_mode_ui():
+        # Create Story Mode section after name input
+        var input_box = $MainContainer/InputBox
+
+        # Spacer
+        var spacer1 = Control.new()
+        spacer1.custom_minimum_size = Vector2(0, 20)
+        input_box.add_child(spacer1)
+
+        # Story Mode Toggle
+        var story_box = HBoxContainer.new()
+        story_box.name = "StoryModeBox"
+
+        story_mode_check = CheckBox.new()
+        story_mode_check.name = "StoryModeCheck"
+        story_mode_check.text = "Story Mode"
+        story_mode_check.button_pressed = false
+        story_mode_check.toggled.connect(_on_story_mode_toggled)
+        story_box.add_child(story_mode_check)
+
+        var story_label = Label.new()
+        story_label.text = "(Erweiterte Story-Events, dynamische Erzaehlung)"
+        story_label.add_theme_font_size_override("font_size", 18)
+        story_label.modulate = Color(0.7, 0.7, 0.7)
+        story_box.add_child(story_label)
+
+        input_box.add_child(story_box)
+
+        # Difficulty Selection
+        var diff_box = HBoxContainer.new()
+        diff_box.name = "DifficultyBox"
+
+        var diff_label = Label.new()
+        diff_label.text = "Schwierigkeit: "
+        diff_box.add_child(diff_label)
+
+        difficulty_option = OptionButton.new()
+        difficulty_option.name = "DifficultyOption"
+        difficulty_option.add_item("Einfach")  # 0
+        difficulty_option.add_item("Normal")   # 1 - Default
+        difficulty_option.add_item("Schwer")   # 2
+        difficulty_option.add_item("Brutal")   # 3
+        difficulty_option.selected = 1
+        difficulty_option.item_selected.connect(_on_difficulty_selected)
+        diff_box.add_child(difficulty_option)
+
+        input_box.add_child(diff_box)
+
+        # Tutorial Toggle
+        var spacer2 = Control.new()
+        spacer2.custom_minimum_size = Vector2(0, 10)
+        input_box.add_child(spacer2)
+
+        var tutorial_box = HBoxContainer.new()
+        tutorial_box.name = "TutorialBox"
+
+        var tutorial_check = CheckBox.new()
+        tutorial_check.name = "TutorialCheck"
+        tutorial_check.text = "Tutorial aktivieren"
+        tutorial_check.button_pressed = true
+        tutorial_check.toggled.connect(_on_tutorial_toggled)
+        tutorial_box.add_child(tutorial_check)
+
+        input_box.add_child(tutorial_box)
+
+func _on_story_mode_toggled(enabled: bool):
+        story_mode_enabled = enabled
+        if enabled:
+                FeedbackOverlay.show_msg("Story Mode: Narrativ-Erlebnis mit speziellen Events aktiviert!", Color.CYAN)
+        else:
+                FeedbackOverlay.show_msg("Story Mode: Klassischer Spielmodus", Color.GRAY)
+
+func _on_difficulty_selected(index: int):
+        difficulty_level = index
+        var diff_names = ["Einfach", "Normal", "Schwer", "Brutal"]
+        var diff_colors = [Color.GREEN, Color.WHITE, Color.ORANGE, Color.RED]
+        FeedbackOverlay.show_msg("Schwierigkeit: " + diff_names[index], diff_colors[index])
+
+func _on_tutorial_toggled(enabled: bool):
+        tutorial_enabled = enabled
 
 func create_load_popup():
         load_popup = PopupMenu.new()
@@ -183,37 +271,45 @@ func _on_btn_hq_right_pressed():
 # SPIEL STARTEN
 func _on_start_button_pressed():
         var entered_name = name_input.text.strip_edges()
-        
+
         if entered_name == "":
                 name_input.placeholder_text = "Bitte Namen eingeben!"
                 return
-                
+
         # Daten sammeln
         var company_name = "Unbekannt"
         var logo_path = ""
-        
+
         if logos.size() > 0:
                 var selected_company = logos[current_logo_idx]
                 company_name = selected_company["name"]
                 logo_path = selected_company["logo"]
-        
+
         # Set tutorial preference
         if GameManager.tutorial_manager:
                 if tutorial_enabled:
                         GameManager.tutorial_manager.enable_tutorial()
                 else:
                         GameManager.tutorial_manager.disable_tutorial()
-        
+
+        # Set story mode and difficulty
+        GameManager.story_mode_enabled = story_mode_enabled
+        GameManager.difficulty_level = difficulty_level
+
+        # Story Mode Startnachricht
+        if story_mode_enabled:
+                print("[STORY MODE] Aktiviert - Erweiterte Erzaehlung wird geladen...")
+
         # Aufruf mit ALLEN 5 Parametern
         GameManager.start_new_game(
-                entered_name, 
-                company_name, 
-                logo_path, 
-                current_office_idx, 
+                entered_name,
+                company_name,
+                logo_path,
+                current_office_idx,
                 current_hq_idx
         )
 
-# Tutorial Toggle
+# Tutorial Toggle (legacy - now in dynamic UI)
 func _on_btn_tutorial_toggle_pressed():
         tutorial_enabled = !tutorial_enabled
         if tutorial_enabled:
