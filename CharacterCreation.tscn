@@ -23,6 +23,10 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = -2.0
+offset_top = -6.0
+offset_right = -2.0
+offset_bottom = -6.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -37,9 +41,6 @@ grow_horizontal = 2
 
 [node name="BtnLoad" type="Button" parent="TopBar"]
 layout_mode = 2
-offset_left = 20.0
-offset_right = 230.0
-offset_bottom = 50.0
 size_flags_horizontal = 0
 text = "Spiel laden"
 
@@ -53,7 +54,7 @@ offset_top = 70.0
 offset_right = 450.0
 offset_bottom = 120.0
 grow_horizontal = 2
-text = "Lege den Grundstein fuer dein Oel-Imperium."
+text = "Lege den Grundstein fuer dein Öl-Imperium."
 horizontal_alignment = 1
 
 [node name="MainContainer" type="VBoxContainer" parent="."]
@@ -61,10 +62,10 @@ layout_mode = 1
 anchors_preset = -1
 anchor_top = 0.12
 anchor_bottom = 0.88
-offset_left = 20.0
-offset_top = 10.0
-offset_right = -20.0
-offset_bottom = -10.0
+offset_left = 251.0
+offset_top = 3.4000092
+offset_right = 1725.0
+offset_bottom = -16.599976
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -72,12 +73,16 @@ alignment = 1
 
 [node name="SelctorsBox" type="HBoxContainer" parent="MainContainer"]
 layout_mode = 2
-size_flags_vertical = 3
 
 [node name="LeftColumn" type="VBoxContainer" parent="MainContainer/SelctorsBox"]
 custom_minimum_size = Vector2(250, 0)
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="Spacer15" type="Control" parent="MainContainer/SelctorsBox/LeftColumn"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="LogoHorizontal" type="HBoxContainer" parent="MainContainer/SelctorsBox/LeftColumn"]
 layout_mode = 2
@@ -93,11 +98,11 @@ layout_mode = 2
 
 [node name="ComapanyLabel" type="Label" parent="MainContainer/SelctorsBox/LeftColumn/LogoHorizontal/LogoVertrical"]
 layout_mode = 2
-text = "Waehle ein Logo:"
+text = "Wähle ein Logo:"
 horizontal_alignment = 1
 
 [node name="LogoDisplay" type="TextureRect" parent="MainContainer/SelctorsBox/LeftColumn/LogoHorizontal/LogoVertrical"]
-custom_minimum_size = Vector2(300, 300)
+custom_minimum_size = Vector2(450, 300)
 layout_mode = 2
 mouse_filter = 2
 expand_mode = 1
@@ -140,22 +145,29 @@ mouse_filter = 2
 layout_mode = 2
 text = "  >  "
 
+[node name="SpacerVert1" type="Control" parent="MainContainer/SelctorsBox"]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 3
+
 [node name="RightColumn" type="VBoxContainer" parent="MainContainer/SelctorsBox"]
 layout_mode = 2
+size_flags_vertical = 0
 alignment = 2
+
+[node name="Spacer15" type="Control" parent="MainContainer/SelctorsBox/RightColumn"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="OfficeLabel" type="Label" parent="MainContainer/SelctorsBox/RightColumn"]
 layout_mode = 2
-text = "Waehle dein Buero:"
+text = "Wähle dein Büro:"
 horizontal_alignment = 1
 
-[node name="Spacer14" type="Control" parent="MainContainer/SelctorsBox/RightColumn"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-
 [node name="OfficeDisplay" type="TextureRect" parent="MainContainer/SelctorsBox/RightColumn"]
-custom_minimum_size = Vector2(500, 280)
+custom_minimum_size = Vector2(600, 300)
 layout_mode = 2
 mouse_filter = 2
 expand_mode = 1
@@ -174,7 +186,7 @@ layout_mode = 2
 text = "  <  "
 
 [node name="Spacer2" type="Control" parent="MainContainer/SelctorsBox/RightColumn/OfficeControls"]
-custom_minimum_size = Vector2(20, 0)
+custom_minimum_size = Vector2(30, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
@@ -188,7 +200,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="Spacer3" type="Control" parent="MainContainer/SelctorsBox/RightColumn/OfficeControls"]
-custom_minimum_size = Vector2(20, 0)
+custom_minimum_size = Vector2(30, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
@@ -203,22 +215,29 @@ custom_minimum_size = Vector2(20, 0)
 layout_mode = 2
 mouse_filter = 2
 
+[node name="SpacerVert2" type="Control" parent="MainContainer/SelctorsBox"]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 3
+
 [node name="RightColumn2" type="VBoxContainer" parent="MainContainer/SelctorsBox"]
 layout_mode = 2
+size_flags_vertical = 0
 alignment = 2
+
+[node name="Spacer15" type="Control" parent="MainContainer/SelctorsBox/RightColumn2"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="HQLabel" type="Label" parent="MainContainer/SelctorsBox/RightColumn2"]
 layout_mode = 2
-text = "Waehle deinen Hauptsitz:"
+text = "Wähle deinen Hauptsitz:"
 horizontal_alignment = 1
 
-[node name="Spacer15" type="Control" parent="MainContainer/SelctorsBox/RightColumn2"]
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-
 [node name="HQDisplay" type="TextureRect" parent="MainContainer/SelctorsBox/RightColumn2"]
-custom_minimum_size = Vector2(500, 280)
+custom_minimum_size = Vector2(600, 300)
 layout_mode = 2
 mouse_filter = 2
 expand_mode = 1
@@ -264,6 +283,11 @@ custom_minimum_size = Vector2(20, 0)
 layout_mode = 2
 mouse_filter = 2
 
+[node name="Spacer15" type="Control" parent="MainContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+mouse_filter = 2
+
 [node name="InputBox" type="VBoxContainer" parent="MainContainer"]
 layout_mode = 2
 alignment = 1
@@ -299,9 +323,6 @@ alignment = 1
 
 [node name="StartButton" type="Button" parent="BottomBar"]
 layout_mode = 2
-offset_left = 750.0
-offset_right = 1170.0
-offset_bottom = 60.0
 size_flags_horizontal = 4
 text = "Spiel starten"
 
