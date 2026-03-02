@@ -27,6 +27,7 @@ anchor_right = 2.5010002
 anchor_bottom = 2.5010002
 offset_right = -1920.7681
 offset_bottom = -1080.4321
+mouse_filter = 2
 
 [node name="BtnLoad" type="Button" parent="."]
 layout_mode = 0
@@ -103,6 +104,7 @@ horizontal_alignment = 1
 [node name="LogoDisplay" type="TextureRect" parent="MainContainer/SelctorsBox/LeftColumn/LogoHorizontal/LogoVertrical"]
 custom_minimum_size = Vector2(400, 400)
 layout_mode = 2
+mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
 
@@ -156,6 +158,7 @@ size_flags_vertical = 3
 [node name="OfficeDisplay" type="TextureRect" parent="MainContainer/SelctorsBox/RightColumn"]
 custom_minimum_size = Vector2(600, 350)
 layout_mode = 2
+mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
 
@@ -219,6 +222,7 @@ size_flags_vertical = 3
 [node name="HQDisplay" type="TextureRect" parent="MainContainer/SelctorsBox/RightColumn2"]
 custom_minimum_size = Vector2(600, 350)
 layout_mode = 2
+mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
 

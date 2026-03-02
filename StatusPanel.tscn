@@ -37,6 +37,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 0
+mouse_filter = 2
 theme = SubResource("Theme_rwavv")
 theme_override_styles/panel = SubResource("StyleBoxFlat_60b88")
 script = ExtResource("1_jnmp8")
@@ -50,6 +51,7 @@ offset_top = -80.0
 offset_bottom = 60.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 theme_override_constants/separation = 20
 
 [node name="Logo" type="TextureRect" parent="HBoxContainer"]
@@ -57,28 +59,35 @@ custom_minimum_size = Vector2(200, 200)
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 0
+mouse_filter = 2
 expand_mode = 2
 stretch_mode = 5
 
 [node name="CompanyLabel" type="Label" parent="HBoxContainer"]
 layout_mode = 2
+mouse_filter = 2
 
 [node name="Spacer2" type="Control" parent="HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.5
+mouse_filter = 2
 
 [node name="NameLabel" type="Label" parent="HBoxContainer"]
 layout_mode = 2
+mouse_filter = 2
 vertical_alignment = 1
 
 [node name="Spacer" type="Control" parent="HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
+mouse_filter = 2
 
 [node name="MoneyLabel" type="Label" parent="HBoxContainer"]
 layout_mode = 2
+mouse_filter = 2
 vertical_alignment = 1
 
 [node name="Control2" type="Control" parent="HBoxContainer"]
 layout_mode = 2
+mouse_filter = 2

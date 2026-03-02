@@ -114,6 +114,7 @@ offset_left = 1.0
 offset_top = -1.0
 offset_right = 1916.0
 offset_bottom = 969.0
+mouse_filter = 2
 texture = ExtResource("2_35wc1")
 expand_mode = 1
 
@@ -231,6 +232,7 @@ offset_bottom = 81.0
 text = "Upgrade"
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
+layer = 1
 
 [node name="StatusPanel" parent="CanvasLayer" instance=ExtResource("3_35wc1")]
 offset_top = -116.0

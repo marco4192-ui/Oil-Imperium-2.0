@@ -552,7 +552,7 @@ func simulate_shareholder_voting():
                 var holder = shareholders[holder_id]
                 var shares = holder["shares"]
                 var holder_type = holder.get("type", "institutional")
-                var type_data = SHAREHOLDER_TYPES.get(holder_type, SHAREHOLDER_TYPES["institutional"])
+                var _type_data = SHAREHOLDER_TYPES.get(holder_type, SHAREHOLDER_TYPES["institutional"])
 
                 for proposal in meeting_proposals:
                         var support_chance = 0.5
