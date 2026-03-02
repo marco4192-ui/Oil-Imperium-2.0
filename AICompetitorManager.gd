@@ -5,7 +5,7 @@ signal competitor_action(competitor_id: String, action: String, details: Diction
 signal cartel_formed(partners: Array)
 signal cartel_discovered(partners: Array, penalty: float)
 signal competitor_bankrupt(competitor_id: String)
-signal hostile_takeover_attempt(attacker: String, target: String)
+# signal hostile_takeover_attempt(attacker: String, target: String)  # Reserved for future use
 
 # ==============================================================================
 # KI-GEGNER PERSOENLICHKEITEN (ohne fixe Firmen)
@@ -97,10 +97,10 @@ func _initialize_competitors():
         var personalities = PERSONALITIES.keys()
 
         # Spieler-Firma aus dem Pool entfernen
-        var player_company_idx = -1
+        var _player_company_idx = -1
         for i in range(companies.size()):
                 if companies[i]["name"] == game_manager.company_name:
-                        player_company_idx = i
+                        _player_company_idx = i
                         used_company_indices.append(i)
                         break
 
@@ -128,13 +128,13 @@ func _initialize_competitors():
                 personality_idx += 1
 
                 # Zufaelligen Namen aus Pool waehlen
-                var name = personality["name_pool"].pick_random()
+                var person_name = personality["name_pool"].pick_random()
 
                 # Competitor erstellen
                 var comp_id = "comp_%d" % i
                 competitors[comp_id] = {
                         "id": comp_id,
-                        "name": name,
+                        "name": person_name,
                         "company": company["name"],
                         "logo": company["logo"],
                         "company_idx": company_idx,
@@ -203,7 +203,8 @@ func _update_competitor_share_price(comp: Dictionary):
         if comp["regions"].size() > 0:
                 change += 0.01  # Positive Entwicklung bei Expansion
 
-        comp["share_price"] *= (1.0 + change)
+        # Oelpreis-Einfluss einbeziehen
+        comp["share_price"] *= (1.0 + change) * (0.95 + oil_factor * 0.1)
         comp["share_price"] = max(1000, comp["share_price"])  # Mindestpreis
 
 func _check_cartel_risks():
