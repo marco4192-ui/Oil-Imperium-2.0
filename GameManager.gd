@@ -20,6 +20,8 @@ const StatisticsManager = preload("res://StatisticsManager.gd")
 const SoundManager = preload("res://SoundManager.gd")
 const StockMarketManager = preload("res://StockMarketManager.gd")
 const AICompetitorManager = preload("res://AICompetitorManager.gd")
+const LegalManager = preload("res://LegalManager.gd")
+const OfficeUpgradeManager = preload("res://OfficeUpgradeManager.gd")
 
 var events_manager = null
 var contracts_manager = null
@@ -39,6 +41,8 @@ var statistics_manager = null
 var sound_manager = null
 var stock_market_manager = null
 var ai_competitor_manager = null
+var legal_manager = null
+var office_upgrade_manager = null
 
 # --- SIGNALE ---
 signal data_updated 
@@ -287,6 +291,22 @@ func _ready():
         add_child(ai_competitor_manager)
         ai_competitor_manager.game_manager = self
 
+        # Legal Manager (Rechtssystem: Behoerden, Prozesse, Anwaelte)
+        legal_manager = LegalManager.new()
+        add_child(legal_manager)
+        legal_manager.game_manager = self
+        legal_manager.legal_case_opened.connect(_on_legal_case_opened)
+        legal_manager.verdict_reached.connect(_on_legal_verdict_reached)
+        legal_manager.mob_attack.connect(_on_legal_mob_attack)
+
+        # Office Upgrade Manager (Haupt-Upgrades + Module)
+        office_upgrade_manager = OfficeUpgradeManager.new()
+        add_child(office_upgrade_manager)
+        office_upgrade_manager.game_manager = self
+        office_upgrade_manager.office_upgraded.connect(_on_office_upgraded)
+        office_upgrade_manager.module_purchased.connect(_on_module_purchased)
+        office_upgrade_manager.all_modules_complete.connect(_on_all_modules_complete)
+
         # Connect tutorial trigger signal
         tutorial_trigger.connect(_on_tutorial_trigger)
         
@@ -301,6 +321,62 @@ func _ready():
 func _on_tutorial_trigger(trigger_name: String):
         if tutorial_manager:
                 tutorial_manager.check_trigger(trigger_name)
+
+# --- LEGAL SYSTEM BENACHRICHTIGUNGEN ---
+func _on_legal_case_opened(case_id: String):
+        var case_data = legal_manager.active_cases.get(case_id, {})
+        if case_data.is_empty():
+                return
+        if has_node("/root/FeedbackOverlay"):
+                var msg = "BEHÖRDEN-VERFAHREN!\n"
+                msg += case_data.get("region", "?") + ": " + case_data.get("offense", "?") + "\n"
+                msg += "Drohende Strafe: $" + str(int(case_data.get("base_penalty", 0))) + "\n"
+                msg += "(Taste R = Recht & Anwälte)"
+                get_node("/root/FeedbackOverlay").show_msg(msg, Color(1.0, 0.6, 0.1))
+        if sound_manager:
+                sound_manager.play_sound("alert_critical")
+
+func _on_legal_verdict_reached(_case_id: String, guilty: bool, penalty: float):
+        if has_node("/root/FeedbackOverlay"):
+                if guilty:
+                        get_node("/root/FeedbackOverlay").show_msg("SCHULDIG!\nGerichtsurteil: $" + str(int(penalty)) + " Strafe", Color(1.0, 0.3, 0.2))
+                else:
+                        get_node("/root/FeedbackOverlay").show_msg("FREISPRUCH!\nGerichts-/Anwaltskosten: $" + str(int(penalty)), Color(0.3, 0.9, 0.4))
+        if sound_manager:
+                sound_manager.play_sound("news_alert")
+
+func _on_legal_mob_attack(region: String, damage: float):
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("MOB-ANGRIFF!\n" + region + ": Anlagen beschädigt\nSchaden: $" + str(int(damage)), Color(1.0, 0.2, 0.2))
+        if sound_manager:
+                sound_manager.play_sound("fire_alarm")
+
+# --- OFFICE UPGRADE BENACHRICHTIGUNGEN ---
+func _on_office_upgraded(upgrade_id: String):
+        var upgrade_name = upgrade_id
+        if office_upgrade_manager and office_upgrade_manager.MAIN_UPGRADES.has(current_era):
+                var era_upgrade = office_upgrade_manager.MAIN_UPGRADES[current_era]
+                if era_upgrade.get("id", "") == upgrade_id:
+                        upgrade_name = era_upgrade.get("name", upgrade_id)
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("BÜRO-UPGRADE INSTALLIERT!\n" + upgrade_name, Color(0.3, 0.9, 0.4))
+        if sound_manager:
+                sound_manager.play_sound("achievement")
+
+func _on_module_purchased(module_id: String):
+        var module_name = module_id
+        if office_upgrade_manager and office_upgrade_manager.UPGRADE_MODULES.has(module_id):
+                module_name = office_upgrade_manager.UPGRADE_MODULES[module_id].get("name", module_id)
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("MODUL INSTALLIERT:\n" + module_name, Color(0.3, 0.9, 0.4))
+        if sound_manager:
+                sound_manager.play_sound("money_gain")
+
+func _on_all_modules_complete(era: int):
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("ALLE MODULE INSTALLIERT!\nÄra-Wechsel ist jetzt möglich (Upgrade-Button im Büro)", Color(0.3, 0.9, 0.4))
+        if sound_manager:
+                sound_manager.play_sound("era_upgrade")
         
 func _load_static_data():
         office_data = GameData.OFFICE_DATA
@@ -712,6 +788,9 @@ func finish_month():
         # Calculate statistics
         if statistics_manager: statistics_manager.calculate_all_statistics()
 
+        # Legal system: Pruefungen, aktive Faelle, Mob-Gewalt, Umweltafaeren
+        if legal_manager: legal_manager.process_monthly()
+
         # Process fire damage recovery
         process_fire_recovery()
         
@@ -1100,7 +1179,9 @@ func save_game(slot_name: String = "1"):
                         "statistics": statistics_manager.get_save_data() if statistics_manager else {},
                         "sound": sound_manager.get_save_data() if sound_manager else {},
                         "stock_market": stock_market_manager.get_save_data() if stock_market_manager else {},
-                        "ai_competitors": ai_competitor_manager.get_save_data() if ai_competitor_manager else {}
+                        "ai_competitors": ai_competitor_manager.get_save_data() if ai_competitor_manager else {},
+                        "legal": legal_manager.get_save_data() if legal_manager else {},
+                        "office_upgrades": office_upgrade_manager.get_save_data() if office_upgrade_manager else {}
                 }
         }
         
@@ -1215,6 +1296,10 @@ func load_game(slot_name: String = "1"):
                         stock_market_manager.load_save_data(managers_data["stock_market"])
                 if ai_competitor_manager and managers_data.has("ai_competitors"):
                         ai_competitor_manager.load_save_data(managers_data["ai_competitors"])
+                if legal_manager and managers_data.has("legal"):
+                        legal_manager.load_save_data(managers_data["legal"])
+                if office_upgrade_manager and managers_data.has("office_upgrades"):
+                        office_upgrade_manager.load_save_data(managers_data["office_upgrades"])
         
         # Re-initialize AI controller if needed
         if ai_controller and ai_controller.game_manager == null:

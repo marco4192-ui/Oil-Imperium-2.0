@@ -194,9 +194,18 @@ func can_upgrade_era() -> Dictionary:
 		return {"can_upgrade": false, "reason": "Jahr noch nicht erreicht (ab %d)" % era_info["year_start"]}
 	
 	# Check cost
-	var cost = ERA_UPGRADE_COSTS[current_era]["cash"]
-	if game_manager.cash < cost:
-		return {"can_upgrade": false, "reason": "Nicht genug Geld ($%d benötigt)" % cost}
+	# Office-Upgrade-System: Haupt-Upgrade + alle Module erforderlich
+	# (Kosten wurden bereits ueber Haupt-Upgrade und Module bezahlt)
+	var cost = 0
+	if game_manager.office_upgrade_manager != null:
+		var gate = game_manager.office_upgrade_manager.can_advance_era()
+		if not gate["can_advance"]:
+			return {"can_upgrade": false, "reason": gate["reason"]}
+	else:
+		# Fallback ohne Office-Upgrade-System: direkter Kauf
+		cost = ERA_UPGRADE_COSTS[current_era]["cash"]
+		if game_manager.cash < cost:
+			return {"can_upgrade": false, "reason": "Nicht genug Geld ($%d benötigt)" % cost}
 	
 	return {
 		"can_upgrade": true, 
@@ -204,6 +213,14 @@ func can_upgrade_era() -> Dictionary:
 		"cost": cost,
 		"next_era": next_era
 	}
+
+func is_next_era_year_reached() -> bool:
+	if game_manager == null:
+		return false
+	var next_era = game_manager.current_era + 1
+	if not ERA_DATA.has(next_era):
+		return false
+	return game_manager.date["year"] >= ERA_DATA[next_era]["year_start"]
 
 func perform_era_upgrade() -> bool:
 	var upgrade_check = can_upgrade_era()
@@ -213,12 +230,14 @@ func perform_era_upgrade() -> bool:
 	var cost = upgrade_check["cost"]
 	var next_era = upgrade_check["next_era"]
 	
-	# Deduct cost
-	game_manager.cash -= cost
+	# Deduct cost (beim gegateten Aera-Wechsel bereits ueber Upgrades bezahlt)
+	if cost > 0:
+		game_manager.cash -= cost
 	game_manager.current_era = next_era
 	
 	# Book transaction
-	game_manager.book_transaction("Global", -cost, "Technology Upgrade")
+	if cost > 0:
+		game_manager.book_transaction("Global", -cost, "Technology Upgrade")
 	
 	# Emit signal
 	era_upgraded.emit(next_era)

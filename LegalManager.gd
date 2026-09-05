@@ -57,9 +57,9 @@ const GOVERNMENT_TYPES = {
 # ==============================================================================
 
 const OFFENSES = {
-	"oil_spill": {"name": "Oelppest", "base_penalty": 5000000, "license_risk": 0.3},
+	"oil_spill": {"name": "Ölpest", "base_penalty": 5000000, "license_risk": 0.3},
 	"illegal_dumping": {"name": "Illegale Muellentsorgung", "base_penalty": 2000000, "license_risk": 0.2},
-	"safety_violation": {"name": "Sicherheitsversto", "base_penalty": 1000000, "license_risk": 0.15},
+	"safety_violation": {"name": "Sicherheitsverstoß", "base_penalty": 1000000, "license_risk": 0.15},
 	"worker_death": {"name": "Arbeitsunfall mit Todesfolge", "base_penalty": 10000000, "license_risk": 0.5},
 	"tax_evasion": {"name": "Steuerhinterziehung", "base_penalty": 0, "license_risk": 0.1},
 	"bribery": {"name": "Bestechung", "base_penalty": 5000000, "license_risk": 0.3},
@@ -182,7 +182,12 @@ func _resolve_case(case_id: String):
 		game_manager.book_transaction("Global", -penalty, "Anwaltskosten")
 	
 	verdict_reached.emit(case_id, guilty, penalty)
-	case_history.append(active_cases[case_id].duplicate())
+	
+	# Urteil fuer die Fallhistorie festhalten
+	case_data["guilty"] = guilty
+	case_data["penalty"] = penalty
+	case_data["status"] = "closed_guilty" if guilty else "closed_acquitted"
+	case_history.append(case_data.duplicate())
 	active_cases.erase(case_id)
 
 # ==============================================================================

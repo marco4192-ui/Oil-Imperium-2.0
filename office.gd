@@ -54,6 +54,10 @@ func _ready():
                                 
                 if not GameManager.tech_activated.is_connected(check_upgrade_status):
                                 GameManager.tech_activated.connect(check_upgrade_status)
+
+                # Buerostil aktualisieren, wenn ein Aera-Wechsel (z.B. aus dem Upgrade-Panel) erfolgt
+                if GameManager.era_manager and not GameManager.era_manager.era_upgraded.is_connected(_on_era_upgraded):
+                                GameManager.era_manager.era_upgraded.connect(_on_era_upgraded)
                 
                 # Connect phone ringing signal for visual feedback
                 if not GameManager.phone_ringing_changed.is_connected(_on_phone_ringing_changed):
@@ -150,6 +154,11 @@ func _input(event):
                                                                 _on_btn_map_pressed()
                                                 accept_event()
                                 
+                                # R = Legal Panel (Recht & Anwälte)
+                                elif key == KEY_R:
+                                                _show_legal_panel()
+                                                accept_event()
+
                                 # H = Help (show shortcuts)
                                 elif key == KEY_H:
                                                 show_help()
@@ -166,6 +175,7 @@ func show_help():
                 help_text += "A = Erfolge anzeigen\n"
                 help_text += "L = Aktivitäts-Log\n"
                 help_text += "F = Finanzbericht\n"
+                help_text += "R = Recht & Anwälte\n"
                 help_text += "$ = Kredite\n"
                 help_text += "1-9 = Schnellauswahl Region\n"
                 help_text += "H = Diese Hilfe"
@@ -188,6 +198,20 @@ func _show_financial_report():
                 var report_panel = preload("res://FinancialReportPanel.gd").new()
                 add_child(report_panel)
                 report_panel.show_report()
+
+func _show_legal_panel():
+                var legal_panel = preload("res://LegalPanel.gd").new()
+                add_child(legal_panel)
+                legal_panel.show_panel()
+
+func _show_upgrade_panel():
+                var upgrade_panel = preload("res://OfficeUpgradePanel.gd").new()
+                add_child(upgrade_panel)
+                upgrade_panel.show_panel()
+
+func _on_era_upgraded(_next_era: int):
+                load_office_style()
+                check_upgrade_status()
 
 func _show_loan_menu():
                 if GameManager.loan_manager == null:
@@ -1208,18 +1232,12 @@ func check_upgrade_status():
                                                 if upgrade_check["can_upgrade"]:
                                                                 btn_upgrade.visible = true
                                                                 btn_upgrade.modulate = Color(0, 1, 0)  # Green - upgrade available
+                                                elif GameManager.era_manager.is_next_era_year_reached():
+                                                                # Jahr erreicht, aber Haupt-Upgrade/Module noch nicht komplett
+                                                                btn_upgrade.visible = true
+                                                                btn_upgrade.modulate = Color(1, 0.5, 0)  # Orange - Upgrade-Fortschritt noetig
                                                 else:
-                                                                # Show button if year is right but money is missing
-                                                                var year = GameManager.date["year"]
-                                                                var current_era = GameManager.current_era
-                                                                if current_era == 0 and year >= 1982:
-                                                                                btn_upgrade.visible = true
-                                                                                btn_upgrade.modulate = Color(1, 0.5, 0)  # Orange - need money
-                                                                elif current_era == 1 and year >= 1995:
-                                                                                btn_upgrade.visible = true
-                                                                                btn_upgrade.modulate = Color(1, 0.5, 0)  # Orange - need money
-                                                                else:
-                                                                                btn_upgrade.visible = false
+                                                                btn_upgrade.visible = false
                                 else:
                                                 # Fallback to old system
                                                 if GameManager.check_tech_availability():
@@ -1229,7 +1247,11 @@ func check_upgrade_status():
                                                                 btn_upgrade.visible = false
 
 func _on_btn_upgrade_pressed():
-                # Use era_manager for upgrade
+                # Mit Office-Upgrade-System: Panel mit Haupt-Upgrade + Modulen oeffnen
+                if GameManager.office_upgrade_manager:
+                                _show_upgrade_panel()
+                                return
+                # Fallback ohne Office-Upgrade-System: direkter Aera-Upgrade
                 if GameManager.era_manager:
                                 var upgrade_check = GameManager.era_manager.can_upgrade_era()
                                 if upgrade_check["can_upgrade"]:

@@ -263,6 +263,8 @@ func start_ambient(ambient_type: String = "office"):
                 # Set loop mode if supported
                 if stream is AudioStreamWAV:
                         stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+                        stream.loop_begin = 0
+                        stream.loop_end = int(stream.get_length() * stream.mix_rate)
                 elif stream is AudioStreamOggVorbis:
                         stream.loop = true
 
