@@ -191,7 +191,80 @@ func connect_research_buttons():
                                                                 btn_practice_drill.pressed.connect(_on_btn_practice_drill_pressed)
 
 # --- NEUES CONTRACT UI SYSTEM ---
+var ai_offers_container: VBoxContainer = null
+var ai_active_container: VBoxContainer = null
+
+func _ensure_ai_contract_ui():
+                                # Sektion für KI-Firmen-Verträge im Contracts-Tab (einmalig erzeugen)
+                                if ai_offers_container != null: return
+                                var parent = contracts_offer_list.get_parent() if contracts_offer_list else null
+                                if parent == null: return
+                                var title = Label.new()
+                                title.name = "AIContractsTitle"
+                                title.text = "=== KI-FIRMEN: LIEFERVERTRÄGE ==="
+                                title.add_theme_font_size_override("font_size", 18)
+                                title.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+                                parent.add_child(title)
+                                ai_offers_container = VBoxContainer.new()
+                                ai_offers_container.name = "AIOffersContainer"
+                                parent.add_child(ai_offers_container)
+                                var title2 = Label.new()
+                                title2.name = "AIActiveTitle"
+                                title2.text = "=== AKTIVE KI-VERTRÄGE ==="
+                                title2.add_theme_font_size_override("font_size", 18)
+                                title2.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+                                parent.add_child(title2)
+                                ai_active_container = VBoxContainer.new()
+                                ai_active_container.name = "AIActiveContainer"
+                                parent.add_child(ai_active_container)
+
+func _update_ai_contracts_ui():
+                                _ensure_ai_contract_ui()
+                                if ai_offers_container == null: return
+                                for c in ai_offers_container.get_children(): c.queue_free()
+                                for c in ai_active_container.get_children(): c.queue_free()
+
+                                if GameManager.ai_contract_offers.is_empty():
+                                                                var none = Label.new(); none.text = "Derzeit keine Angebote der Konkurrenz."
+                                                                none.modulate = Color(0.7, 0.7, 0.7)
+                                                                ai_offers_container.add_child(none)
+                                for offer in GameManager.ai_contract_offers:
+                                                                var row = HBoxContainer.new()
+                                                                ai_offers_container.add_child(row)
+                                                                var lbl = Label.new()
+                                                                var premium_pct = int(round((offer["price_per_bbl"] / max(0.01, GameManager.oil_price) - 1.0) * 100))
+                                                                var relation = int(round(GameManager.get_ai_relation(offer["bot_index"]) * 100))
+                                                                lbl.text = "%s | %s bbl/Monat x %d Monate | $%.2f/bbl (+%d%%) | Beziehungen: %d%% | verfällt in %d Mon." % [
+                                                                                                offer["company"], GameManager.format_cash(offer["volume"]), offer["months"],
+                                                                                                offer["price_per_bbl"], premium_pct, relation, offer["expires_in"]]
+                                                                lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                                                                lbl.modulate = Color.WHITE
+                                                                row.add_child(lbl)
+                                                                var btn = Button.new()
+                                                                btn.text = "ANNEHMEN"
+                                                                btn.pressed.connect(_on_accept_ai_contract.bind(offer["id"]))
+                                                                row.add_child(btn)
+
+                                if GameManager.ai_contracts_active.is_empty():
+                                                                var none = Label.new(); none.text = "Keine aktiven KI-Verträge."
+                                                                none.modulate = Color(0.7, 0.7, 0.7)
+                                                                ai_active_container.add_child(none)
+                                for contract in GameManager.ai_contracts_active:
+                                                                var lbl = Label.new()
+                                                                var monthly_value = contract["volume"] * contract["price_per_bbl"]
+                                                                lbl.text = "► %s: %s bbl/Monat à $%.2f = %s/Monat | %d Monate übrig | %d geliefert | oil nötig: %s bbl" % [
+                                                                                                contract["company"], GameManager.format_cash(contract["volume"]), contract["price_per_bbl"],
+                                                                                                GameManager.format_cash(monthly_value), contract["months_left"], contract["delivered"],
+                                                                                                GameManager.format_cash(contract["volume"])]
+                                                                lbl.modulate = Color(0.4, 0.9, 0.5)
+                                                                ai_active_container.add_child(lbl)
+
+func _on_accept_ai_contract(offer_id: int):
+                                if GameManager.accept_ai_contract(offer_id):
+                                                                update_contracts_view()
+
 func update_contracts_view():
+                                _update_ai_contracts_ui()
                                 # 1. Supply Contracts (Aktiv)
                                 if contracts_active_list:
                                                                 for c in contracts_active_list.get_children(): c.queue_free()

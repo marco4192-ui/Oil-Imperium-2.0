@@ -192,6 +192,37 @@ func _init():
 	check(summary.has("score") and summary.get("score", 0) > 0, "Endsummary mit Score erzeugt")
 	check(summary.has("company") and summary.has("achievements"), "Endsummary enthält Firmen-/Erfolgsdaten")
 
+	print("--- KI-VERTRAEGE & DIPLOMATIE ---")
+	gm.ai_contract_offers.clear()
+	gm.ai_contracts_active.clear()
+	gm.ai_relations.clear()
+	var bot0 = gm._get_ai_bot(0)
+	check(bot0 != null, "KI-Bot erreichbar")
+	bot0["cash"] = 50000000.0
+	gm.ai_contract_offers.append({"id": 999, "bot_index": 0, "company": str(bot0["name"]), "volume": 100000.0, "months": 2, "price_per_bbl": 10.0, "expires_in": 3})
+	check(gm.accept_ai_contract(999), "KI-Vertrag angenommen")
+	check(gm.ai_contracts_active.size() == 1, "Vertrag aktiv")
+	check(gm.ai_contract_offers.is_empty(), "Angebot verbraucht")
+
+	gm.oil_stored["Texas"] = 150000.0
+	var cash_before_ai = gm.cash
+	var bot_cash_before = float(bot0["cash"])
+	gm.process_ai_contracts()
+	print("  [DBG] cash=%s erwartet=%s texas=%s aktiv=%s" % [gm.cash, cash_before_ai + 1000000.0, gm.oil_stored["Texas"], gm.ai_contracts_active.size()])
+	check(gm.cash == cash_before_ai + 1000000.0, "Lieferung: +$1M Erlös")
+	check(gm.oil_stored["Texas"] == 50000.0, "Öl aus größter Region geliefert")
+	check(float(bot0["cash"]) < bot_cash_before, "KI zahlt mit echtem Kapital")
+	check(gm.get_ai_relation(0) > 0.5, "Beziehung durch Lieferung gestiegen")
+	check(gm.ai_contracts_active.size() == 1 and gm.ai_contracts_active[0]["months_left"] == 1, "Vertrag läuft weiter")
+
+	gm.oil_stored["Texas"] = 0.0
+	var cash_before_breach = gm.cash
+	gm.process_ai_contracts()
+	check(gm.cash == cash_before_breach - 500000.0, "Vertragsstrafe: 50% eines Monatswerts")
+	check(gm.ai_contracts_active.is_empty(), "Vertrag nach Bruch beendet")
+	check(gm.get_ai_relation(0) < 0.55, "Ansehensverlust nach Bruch")
+	check(gm.get_ai_contracts_save_data().has("relations"), "KI-Verträge in Save-Daten")
+
 	print("")
 	if failures == 0:
 		print("ALLE WIRTSCHAFTS-TESTS BESTANDEN")

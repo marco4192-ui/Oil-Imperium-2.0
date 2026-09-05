@@ -144,6 +144,12 @@ var game_ended_emitted: bool = false
 var end_screen_shown: bool = false
 var tank_hint_shown: bool = false
 
+# --- KI-VERTRAEGE & DIPLOMATIE ---
+var ai_contract_offers: Array = []    # {id, bot_index, company, volume, months, price_per_bbl, expires_in}
+var ai_contracts_active: Array = []   # {id, bot_index, company, volume, price_per_bbl, months_left, delivered}
+var ai_relations: Dictionary = {}     # bot_index -> 0.0..1.0
+var ai_contract_id_counter: int = 1
+
 signal game_ended(summary)
 
 const PIPELINE_NET_COSTS = {0: 2500000.0, 1: 6000000.0, 2: 15000000.0}
@@ -831,6 +837,10 @@ func finish_month():
         # Legal system: Pruefungen, aktive Faelle, Mob-Gewalt, Umweltafaeren
         if legal_manager: legal_manager.process_monthly()
 
+        # KI-Vertraege: Angebote erneuern, Lieferungen abwickeln
+        generate_ai_contract_offers()
+        process_ai_contracts()
+
         # Process fire damage recovery
         process_fire_recovery()
         
@@ -1074,7 +1084,6 @@ func _show_pipeline_choice():
         btn_team.custom_minimum_size = Vector2(240, 60)
         btn_team.disabled = cash < team_cost
         btn_team.pressed.connect(func():
-                cash -= team_cost
                 book_transaction(pending_sale_region, -team_cost, "Pipeline Notfall-Team")
                 var amt = pending_sale_amount
                 var val = pending_sale_value
@@ -1391,6 +1400,151 @@ func finish_research():
 # --- SPEICHERSYSTEM ---
 const SAVE_VERSION = 5  # Increment when adding new save data fields
 
+# ==============================================================================
+# --- KI-VERTRAEGE & DIPLOMATIE ---
+# KI-Firmen kaufen Oel vom Spieler. Erfuellte Vertraege verbessern die
+# Beziehungen (bessere Preise), Vertragsbruch kostet Strafe und Ansehen.
+# Die KI zahlt mit ihrem echten Kapital.
+# ==============================================================================
+
+func get_ai_relation(bot_index: int) -> float:
+        return ai_relations.get(bot_index, 0.5)
+
+func _set_ai_relation(bot_index: int, value: float):
+        ai_relations[bot_index] = clamp(value, 0.0, 1.0)
+
+func _get_ai_bot(bot_index: int) -> Variant:
+        if ai_controller and bot_index >= 0 and bot_index < ai_controller.competitors.size():
+                return ai_controller.competitors[bot_index]
+        return null
+
+func generate_ai_contract_offers():
+        # Verfallene Angebote rausfiltern
+        for offer in ai_contract_offers.duplicate():
+                offer["expires_in"] -= 1
+                if offer["expires_in"] <= 0:
+                        ai_contract_offers.erase(offer)
+
+        if ai_controller == null: return
+        for i in range(ai_controller.competitors.size()):
+                if ai_contract_offers.size() >= 3: break
+                # max. 1 Angebot + 1 aktiver Vertrag pro Firma
+                var has_offer = false
+                var has_active = false
+                for o in ai_contract_offers:
+                        if o["bot_index"] == i: has_offer = true
+                for c in ai_contracts_active:
+                        if c["bot_index"] == i: has_active = true
+                if has_offer or has_active: continue
+
+                var relation = get_ai_relation(i)
+                if randf() >= 0.06 + relation * 0.08: continue
+
+                var bot = _get_ai_bot(i)
+                if bot == null: continue
+                var volume = float(randi_range(100, 350)) * 1000.0
+                var months = randi_range(6, 12)
+                var premium = 1.08 + relation * 0.14   # gute Beziehungen: bis ~+22%
+                var price_per_bbl = oil_price * get_seasonal_price_factor() * premium
+                # Die KI muss sich den ganzen Vertrag leisten koennen
+                if bot["cash"] < volume * months * price_per_bbl * 0.5: continue
+
+                ai_contract_offers.append({
+                        "id": ai_contract_id_counter,
+                        "bot_index": i,
+                        "company": bot["name"],
+                        "volume": volume,
+                        "months": months,
+                        "price_per_bbl": price_per_bbl,
+                        "expires_in": 3,
+                })
+                ai_contract_id_counter += 1
+
+func accept_ai_contract(offer_id: int) -> bool:
+        var offer = null
+        for o in ai_contract_offers:
+                if o["id"] == offer_id: offer = o
+        if offer == null: return false
+        if ai_contracts_active.size() >= 3:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Maximal 3 KI-Verträge gleichzeitig!", Color.ORANGE)
+                return false
+
+        ai_contract_offers.erase(offer)
+        ai_contracts_active.append({
+                "id": offer["id"],
+                "bot_index": offer["bot_index"],
+                "company": offer["company"],
+                "volume": offer["volume"],
+                "price_per_bbl": offer["price_per_bbl"],
+                "months_left": offer["months"],
+                "delivered": 0,
+        })
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("LIEFERVERTRAG ABGESCHLOSSEN:\n%s kauft %s bbl/Monat für %d Monate." % [offer["company"], format_cash(offer["volume"]), offer["months"]], Color.GREEN)
+        notify_update()
+        return true
+
+func process_ai_contracts():
+        for contract in ai_contracts_active.duplicate():
+                var total_stored = 0.0
+                for r in oil_stored:
+                        total_stored += oil_stored[r]
+
+                var value = contract["volume"] * contract["price_per_bbl"]
+                if total_stored >= contract["volume"]:
+                        # Lieferung aus der Region mit dem groessten Bestand
+                        var source = ""
+                        var best = -1.0
+                        for r in oil_stored:
+                                if oil_stored[r] > best:
+                                        best = oil_stored[r]
+                                        source = r
+                        oil_stored[source] -= contract["volume"]
+                        book_transaction(source, value, "KI-Vertrag: " + contract["company"])
+                        contract["delivered"] += 1
+                        contract["months_left"] -= 1
+                        _set_ai_relation(contract["bot_index"], get_ai_relation(contract["bot_index"]) + 0.02)
+
+                        if contract["months_left"] <= 0:
+                                _set_ai_relation(contract["bot_index"], get_ai_relation(contract["bot_index"]) + 0.05)
+                                ai_contracts_active.erase(contract)
+                                if activity_feed:
+                                        activity_feed.log_activity(activity_feed.ACTIVITY_TYPE.FINANCIAL_MILESTONE,
+                                                        {"info": "KI-Vertrag erfüllt: " + contract["company"] + " (+Ansehen)"})
+                else:
+                        # Lieferverzug: Strafe + Ansehensverlust
+                        var penalty = value * 0.5
+                        book_transaction("Global", -penalty, "Vertragsstrafe: " + contract["company"])
+                        _set_ai_relation(contract["bot_index"], get_ai_relation(contract["bot_index"]) - 0.2)
+                        ai_contracts_active.erase(contract)
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("LIEFERVERTRAG GEBROCHEN!\n%s: Öl fehlte. Strafe: -$%s\nAnsehen stark beschädigt!" % [contract["company"], format_cash(penalty)], Color.RED)
+                        if activity_feed:
+                                activity_feed.log_activity(activity_feed.ACTIVITY_TYPE.FINANCIAL_MILESTONE,
+                                                {"info": "Vertragsbruch gegenüber " + contract["company"]})
+
+        # KI bezahlt mit echtem Kapital
+        for contract in ai_contracts_active:
+                if contract["months_left"] > 0:
+                        var bot = _get_ai_bot(contract["bot_index"])
+                        if bot != null:
+                                bot["cash"] = max(0.0, bot["cash"] - contract["volume"] * contract["price_per_bbl"])
+
+func get_ai_contracts_save_data() -> Dictionary:
+        return {
+                "offers": ai_contract_offers,
+                "active": ai_contracts_active,
+                "relations": ai_relations,
+                "id_counter": ai_contract_id_counter,
+        }
+
+func load_ai_contracts_data(data: Dictionary):
+        ai_contract_offers = data.get("offers", [])
+        ai_contracts_active = data.get("active", [])
+        ai_relations = data.get("relations", {})
+        ai_contract_id_counter = int(data.get("id_counter", 1))
+
 func save_game(slot_name: String = "1"):
         var path = SAVE_PATH_BASE + slot_name + ".save"
         current_save_slot = slot_name
@@ -1455,6 +1609,7 @@ func save_game(slot_name: String = "1"):
                         "sound": sound_manager.get_save_data() if sound_manager else {},
                         "stock_market": stock_market_manager.get_save_data() if stock_market_manager else {},
                         "ai_competitors": ai_competitor_manager.get_save_data() if ai_competitor_manager else {},
+                        "ai_contracts": get_ai_contracts_save_data(),
                         "legal": legal_manager.get_save_data() if legal_manager else {},
                         "office_upgrades": office_upgrade_manager.get_save_data() if office_upgrade_manager else {}
                 }
@@ -1576,6 +1731,8 @@ func load_game(slot_name: String = "1"):
                         legal_manager.load_save_data(managers_data["legal"])
                 if office_upgrade_manager and managers_data.has("office_upgrades"):
                         office_upgrade_manager.load_save_data(managers_data["office_upgrades"])
+                if managers_data.has("ai_contracts"):
+                        load_ai_contracts_data(managers_data["ai_contracts"])
         
         # Re-initialize AI controller if needed
         if ai_controller and ai_controller.game_manager == null:
