@@ -57,6 +57,7 @@ const SOUNDS = {
         "era_upgrade": {"path": "res://assets/sounds/special/era_upgrade.wav", "category": SoundCategory.SPECIAL, "volume_db": 0.0},
         "game_over": {"path": "res://assets/sounds/special/game_over.wav", "category": SoundCategory.SPECIAL, "volume_db": 0.0},
         "victory": {"path": "res://assets/sounds/special/victory.wav", "category": SoundCategory.SPECIAL, "volume_db": 0.0},
+        "explosion": {"path": "res://assets/sounds/special/explosion.wav", "category": SoundCategory.SPECIAL, "volume_db": -2.0},
 
         # Sabotage
         "sabotage_success": {"path": "res://assets/sounds/sabotage/success.wav", "category": SoundCategory.GAME_EVENT, "volume_db": -3.0},

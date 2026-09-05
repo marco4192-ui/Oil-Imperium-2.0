@@ -255,6 +255,7 @@ func finish_success():
 				else:
 						var region_name = GameManager.active_region_name
 						var claim_id = GameManager.active_claim_id
+						var drilled_claim = null
 						# FIX: Add null checks to prevent crashes
 						if region_name != "" and GameManager.regions.has(region_name):
 								var region = GameManager.regions[region_name]
@@ -263,8 +264,20 @@ func finish_success():
 										for c in region["claims"]:
 												if c != null and typeof(c) == TYPE_DICTIONARY and c.get("id", -1) == claim_id:
 														c["drilled"] = true
+														drilled_claim = c
 														break
-						
+
+						# BLOWOUT: Frisch gebohrte Felder können fassen und in Flammen aufgehen
+						if drilled_claim != null and drilled_claim.get("has_oil", false):
+								var is_offshore = GameManager.regions[region_name].get("offshore_ratio", 0.0) >= 0.5
+								if randf() < (0.18 if is_offshore else 0.10):
+										GameManager.pending_fire_event = {"region": region_name, "claim_id": claim_id, "type": "oil_field_fire"}
+										GameManager.show_fire_options = true
+										GameManager.notify_update()
+										FeedbackOverlay.show_msg("BLOWOUT! Das neue Feld steht in Flammen!\nTed Redhair muss ran — oder das teure Profi-Team.", Color(1.0, 0.4, 0.1))
+										get_tree().change_scene_to_file("res://Office.tscn")
+										return
+
 						FeedbackOverlay.show_msg("ÖLQUELLE ERSCHLOSSEN! HERVORRAGENDE ARBEIT.")
 						get_tree().change_scene_to_file("res://RegionDetail.tscn")
 		else:

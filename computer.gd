@@ -111,6 +111,7 @@ func _ready():
 
                                 apply_era_theme()
                                 _add_tiny_tank_button()
+                                _add_market_sale_ui()
                                 connect_research_buttons()
                                 update_map_buttons()
                                 update_tank_buttons_visibility()
@@ -638,6 +639,7 @@ func update_sales_view():
 
 func update_spot_market_view():
                                 if price_label: price_label.text = "SPOT PREIS: $%.2f" % GameManager.oil_price
+                                _update_market_sale_ui()
                                 if current_sales_region != "":
                                                                 var stored = GameManager.oil_stored.get(current_sales_region, 0)
                                                                 var cap = GameManager.tank_capacity.get(current_sales_region, 0)
@@ -666,11 +668,13 @@ func _on_sales_slider_changed(v):
 
 func update_sales_calculation(v):
                                 if btn_sell_action:
-                                                                btn_sell_action.text = "VERKAUFEN ($%d)" % int(v * GameManager.oil_price)
+                                                                var per_bbl = GameManager.get_sale_price_per_bbl(current_sales_region, refined_sale_toggle != null and refined_sale_toggle.visible and refined_sale_toggle.button_pressed)
+                                                                btn_sell_action.text = "VERKAUFEN ($%d)" % int(v * per_bbl)
 
 func _on_btn_sell_all_pressed():
                                 if current_sales_region != "":
-                                                                GameManager.commit_sale(current_sales_region, current_sale_amount, current_sale_amount * GameManager.oil_price)
+                                                                var refined = refined_sale_toggle != null and refined_sale_toggle.visible and refined_sale_toggle.button_pressed
+                                                                GameManager.commit_sale(current_sales_region, current_sale_amount, 0, false, refined)
                                                                 update_sales_view()
 
 func update_sales_buttons_visibility():
@@ -702,6 +706,42 @@ func update_tank_buy_buttons():
                                                                 btn_buy_large.text = "GROSS (2.5M bbl)\n$" + GameManager.format_cash(cost_l)
 
 var btn_buy_tiny: Button = null
+var refined_sale_toggle: CheckButton = null
+var market_info_label: Label = null
+
+func _add_market_sale_ui():
+                                # Markt-Info (Qualität/Saison/Limit) + Raffinerie-Umschalter im Spot-Verkauf
+                                if tab_spot == null: return
+                                var vbox = tab_spot.get_node_or_null("HSeperator/SellVSeperator")
+                                if vbox == null: return
+                                market_info_label = Label.new()
+                                market_info_label.name = "MarketInfoLabel"
+                                market_info_label.add_theme_font_size_override("font_size", 14)
+                                vbox.add_child(market_info_label)
+                                refined_sale_toggle = CheckButton.new()
+                                refined_sale_toggle.name = "RefinedSaleToggle"
+                                refined_sale_toggle.text = "RAFFINERIE-VERKAUF (+40% Preis)"
+                                refined_sale_toggle.tooltip_text = "Raffinierte Produkte statt Rohöl verkaufen (max. 300k bbl/Monat)"
+                                refined_sale_toggle.add_theme_font_size_override("font_size", 14)
+                                refined_sale_toggle.toggled.connect(func(_on): update_sales_calculation(sales_slider.value))
+                                vbox.add_child(refined_sale_toggle)
+
+func _update_market_sale_ui():
+                                if market_info_label == null: return
+                                var has_refinery = GameManager.facilities.get("refinery", {}).get("built", false)
+                                if refined_sale_toggle:
+                                                                refined_sale_toggle.visible = has_refinery
+                                var info = "SAISON: x%.2f" % GameManager.get_seasonal_price_factor()
+                                if current_sales_region != "":
+                                                                info = "QUALITÄT: " + GameManager.get_region_quality_name(current_sales_region) + "  |  " + info
+                                var limit = GameManager.get_current_sale_cap()
+                                if limit > 0.0:
+                                                                info += "  |  MARKTLIMIT: %s bbl (verkauft: %s)" % [GameManager.format_cash(limit), GameManager.format_cash(GameManager.monthly_sold)]
+                                else:
+                                                                info += "  |  MARKTLIMIT: keines"
+                                if has_refinery:
+                                                                info += "\nRAFFINERIE: %s / %s bbl verarbeitet" % [GameManager.format_cash(GameManager.monthly_refined_sold), GameManager.format_cash(GameManager.REFINERY_MONTHLY_CAPACITY)]
+                                market_info_label.text = info
 
 func _add_tiny_tank_button():
                                 # Guenstige Starter-Stufe (250k bbl) programmatisch einfuegen,

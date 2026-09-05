@@ -63,6 +63,16 @@ func _ready():
                 # Buerostil aktualisieren, wenn ein Aera-Wechsel (z.B. aus dem Upgrade-Panel) erfolgt
                 if GameManager.era_manager and not GameManager.era_manager.era_upgraded.is_connected(_on_era_upgraded):
                                 GameManager.era_manager.era_upgraded.connect(_on_era_upgraded)
+
+                # Feuer-Optionen anzeigen, wenn z.B. ein Blowout beim Bohren eingesetzt hat
+                if GameManager.show_fire_options and not GameManager.pending_fire_event.is_empty():
+                                show_fire_options_dialog()
+
+                # Endauswertung nach 30 Jahren (01.01.2001)
+                if not GameManager.game_ended.is_connected(_on_game_ended):
+                                GameManager.game_ended.connect(_on_game_ended)
+                if GameManager.game_ended_emitted:
+                                _on_game_ended(GameManager._build_end_summary())
                 
                 # Connect phone ringing signal for visual feedback
                 if not GameManager.phone_ringing_changed.is_connected(_on_phone_ringing_changed):
@@ -219,6 +229,120 @@ func _on_era_upgraded(_next_era: int):
                 check_upgrade_status()
 
 # ==============================================================================
+# --- ENDAUSWERTUNG & HALL OF FAME (nach 30 Jahren) ---
+# ==============================================================================
+func _on_game_ended(summary: Dictionary):
+                if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("30 JAHRE VORBEI!\nDie Endabrechnung wartet...", Color(1.0, 0.85, 0.3))
+                var layer = CanvasLayer.new()
+                layer.name = "EndScreenLayer"
+                layer.layer = 180
+                add_child(layer)
+
+                var dim = ColorRect.new()
+                dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+                dim.color = Color(0, 0, 0, 0.85)
+                layer.add_child(dim)
+
+                var panel = Panel.new()
+                panel.custom_minimum_size = Vector2(900, 780)
+                panel.set_anchors_preset(Control.PRESET_CENTER)
+                panel.offset_left = -450; panel.offset_right = 450
+                panel.offset_top = -390; panel.offset_bottom = 390
+                layer.add_child(panel)
+
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                for m in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+                                margin.add_theme_constant_override(m, 30)
+                panel.add_child(margin)
+
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 10)
+                margin.add_child(vbox)
+
+                var title = Label.new()
+                title.text = "30 JAHRE OIL IMPERIUM — ENDABRECHNUNG"
+                title.add_theme_font_size_override("font_size", 28)
+                title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+                title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                vbox.add_child(title)
+
+                var score_lbl = Label.new()
+                score_lbl.text = "ENDPUNKTE: %s" % GameManager.format_cash(summary.get("score", 0))
+                score_lbl.add_theme_font_size_override("font_size", 40)
+                score_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
+                score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                vbox.add_child(score_lbl)
+
+                var details = Label.new()
+                details.text = "Firma: %s (%s)\nBargeld: $%s\nAnlagen & Tanks: $%s\nErfolge: %d\nErreichte Ära: %s" % [
+                                summary.get("company", "?"), summary.get("player", "?"),
+                                GameManager.format_cash(summary.get("cash", 0)),
+                                GameManager.format_cash(summary.get("assets", 0)),
+                                summary.get("achievements", 0),
+                                ["1970er", "1980er", "1990er", "2000er"][clampi(summary.get("era", 0), 0, 3)],
+                ]
+                details.add_theme_font_size_override("font_size", 18)
+                details.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                vbox.add_child(details)
+
+                var hs_title = Label.new()
+                hs_title.text = "HALL OF FAME (Top 10)"
+                hs_title.add_theme_font_size_override("font_size", 20)
+                hs_title.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+                vbox.add_child(hs_title)
+
+                var scores = _load_highscores()
+                scores.append({"company": summary.get("company", "?"), "score": summary.get("score", 0), "year": 2001})
+                scores.sort_custom(func(a, b): return a.get("score", 0) > b.get("score", 0))
+                if scores.size() > 10:
+                                scores.resize(10)
+                _save_highscores(scores)
+
+                var list = Label.new()
+                var lines = ""
+                for i in range(scores.size()):
+                                var entry = scores[i]
+                                lines += "%2d. %-24s %14s\n" % [i + 1, entry.get("company", "?"), GameManager.format_cash(entry.get("score", 0))]
+                list.text = lines
+                list.add_theme_font_size_override("font_size", 16)
+                vbox.add_child(list)
+
+                var row = HBoxContainer.new()
+                row.alignment = BoxContainer.ALIGNMENT_CENTER
+                row.add_theme_constant_override("separation", 20)
+                vbox.add_child(row)
+
+                var btn_continue = Button.new()
+                btn_continue.text = "WEITERSPIELEN (Sandbox)"
+                btn_continue.custom_minimum_size = Vector2(260, 50)
+                btn_continue.pressed.connect(func(): layer.queue_free())
+                row.add_child(btn_continue)
+
+                var btn_new = Button.new()
+                btn_new.text = "NEUES SPIEL"
+                btn_new.custom_minimum_size = Vector2(220, 50)
+                btn_new.pressed.connect(func(): get_tree().change_scene_to_file("res://CharacterCreation.tscn"))
+                row.add_child(btn_new)
+
+const HIGHSCORE_PATH = "user://highscores.json"
+
+func _load_highscores() -> Array:
+                if FileAccess.file_exists(HIGHSCORE_PATH):
+                                var f = FileAccess.open(HIGHSCORE_PATH, FileAccess.READ)
+                                if f:
+                                                var data = JSON.parse_string(f.get_as_text())
+                                                if data is Array:
+                                                                return data
+                return []
+
+func _save_highscores(scores: Array):
+                var f = FileAccess.open(HIGHSCORE_PATH, FileAccess.WRITE)
+                if f:
+                                f.store_string(JSON.stringify(scores, "  "))
+
+# ==============================================================================
 # --- PERSISTENTE AKTIONSLEISTE ---
 # Alle wichtigen Aktionen immer sichtbar und gleich groß, unabhängig vom
 # gekauften Büro-Stil. Die Tisch-Objekte bleiben zusätzlich erhalten.
@@ -235,8 +359,8 @@ func _build_action_bar():
                 action_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
                 action_bar.offset_left = 8
                 action_bar.offset_right = -8
-                action_bar.offset_top = -148
-                action_bar.offset_bottom = -76
+                action_bar.offset_top = -186
+                action_bar.offset_bottom = -114
                 action_bar.mouse_filter = Control.MOUSE_FILTER_STOP
 
                 var style = StyleBoxFlat.new()
@@ -248,26 +372,20 @@ func _build_action_bar():
                 bar_layer.add_child(action_bar)
 
                 var row = HBoxContainer.new()
-                row.add_theme_constant_override("separation", 4)
+                row.add_theme_constant_override("separation", 8)
                 row.alignment = BoxContainer.ALIGNMENT_CENTER
                 action_bar.add_child(row)
 
+                # Primäre Spielfunktionen (immer als Button sichtbar)
                 var actions = [
                                 ["Map", "KARTE (M)", "Karte und Regionen öffnen (Taste M)", func(): _on_btn_map_pressed()],
                                 ["Computer", "PC (C)", "Computer mit Maerkten, Forschung und Verkaeufen (Taste C)", func(): _on_btn_computer_pressed()],
-                                ["Newspaper", "ZEITUNG", "Aktuelle Nachrichten und Archiv", func(): _on_btn_newspaper_pressed()],
                                 ["Phone", "TELEFON", "Notrufe und Ereignisse", func(): _on_btn_phone_pressed()],
-                                ["Drawer", "AKTEN", "Aktenschrank", func(): _on_btn_drawer_pressed()],
-                                ["Briefcase", "TASCHE", "Aktentasche", func(): _on_btn_briefcase_pressed()],
-                                ["Upgrade", "UPGRADE", "Buerro-Upgrades und Aera-Wechsel", func(): _on_btn_upgrade_pressed()],
-                                ["Legal", "RECHT (R)", "Recht und Anwaelte: Verfahren, Bestechung, Compliance (Taste R)", func(): _show_legal_panel()],
-                                ["Achievements", "ERFOLGE (A)", "Erfolge anzeigen (Taste A)", func(): _show_achievements()],
-                                ["Log", "LOG (L)", "Aktivitaets-Log (Taste L)", func(): _show_activity_feed()],
+                                ["Briefcase", "AKTENTASCHE", "Aktentasche", func(): _on_btn_briefcase_pressed()],
                                 ["Finance", "FINANZ (F)", "Finanzbericht mit Charts (Taste F)", func(): _show_financial_report()],
                                 ["Loans", "KREDIT ($)", "Kreditzentrale (Taste $)", func(): _show_loan_menu()],
-                                ["Save", "SPEICHERN (S)", "Spiel speichern (Taste S)", func(): GameManager.save_game(GameManager.current_save_slot)],
+                                ["Legal", "RECHT (R)", "Recht und Anwaelte: Verfahren, Bestechung, Compliance (Taste R)", func(): _show_legal_panel()],
                                 ["Month", "MONAT (E)", "Monat beenden (Taste E)", func(): _on_btn_end_month_pressed()],
-                                ["Help", "HILFE (H)", "Hilfe und Tastenkuerzel (Taste H)", func(): show_help()],
                 ]
 
                 for entry in actions:
@@ -275,16 +393,53 @@ func _build_action_bar():
                                 btn.name = "Bar" + entry[0]
                                 btn.text = entry[1]
                                 btn.tooltip_text = entry[2]
-                                btn.custom_minimum_size = Vector2(118, 60)
-                                btn.add_theme_font_size_override("font_size", 14)
+                                btn.custom_minimum_size = Vector2(150, 60)
+                                btn.add_theme_font_size_override("font_size", 15)
                                 btn.mouse_filter = Control.MOUSE_FILTER_STOP
                                 var handler: Callable = entry[3]
                                 btn.pressed.connect(handler)
                                 row.add_child(btn)
-                                if entry[0] == "Upgrade":
-                                                bar_upgrade_btn = btn
-                                elif entry[0] == "Month":
+                                if entry[0] == "Month":
                                                 btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+
+                # Seltener genutzte Funktionen im Dropdown
+                var more_btn = MenuButton.new()
+                more_btn.name = "BarMore"
+                more_btn.text = "MEHR ..."
+                more_btn.tooltip_text = "Zeitung, Akten, Speichern, Erfolge, Log, Hilfe"
+                more_btn.custom_minimum_size = Vector2(140, 60)
+                more_btn.add_theme_font_size_override("font_size", 15)
+                more_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+                var more_menu = more_btn.get_popup()
+                more_menu.add_item("ZEITUNG", 1)
+                more_menu.add_item("AKTEN", 2)
+                more_menu.add_separator()
+                more_menu.add_item("SPEICHERN (S)", 3)
+                more_menu.add_item("ERFOLGE (A)", 4)
+                more_menu.add_item("LOG (L)", 5)
+                more_menu.add_item("HILFE (H)", 6)
+                more_menu.id_pressed.connect(func(id):
+                                match id:
+                                                1: _on_btn_newspaper_pressed()
+                                                2: _on_btn_drawer_pressed()
+                                                3: GameManager.save_game(GameManager.current_save_slot)
+                                                4: _show_achievements()
+                                                5: _show_activity_feed()
+                                                6: show_help()
+                )
+                row.add_child(more_btn)
+
+                # Upgrade als eigener Button am Ende
+                var up_btn = Button.new()
+                up_btn.name = "BarUpgrade"
+                up_btn.text = "UPGRADE"
+                up_btn.tooltip_text = "Buerro-Upgrades und Aera-Wechsel"
+                up_btn.custom_minimum_size = Vector2(150, 60)
+                up_btn.add_theme_font_size_override("font_size", 15)
+                up_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+                up_btn.pressed.connect(func(): _on_btn_upgrade_pressed())
+                row.add_child(up_btn)
+                bar_upgrade_btn = up_btn
 
                 check_upgrade_status()
 

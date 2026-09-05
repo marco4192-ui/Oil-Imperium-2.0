@@ -125,6 +125,73 @@ func _init():
 		gm._apply_fire_damage("Texas", fire_claim["id"], 100.0, true)
 		check(fire_claim.get("drilled", false) == false, "Totalschaden: Feld muss neu gebohrt werden")
 
+	print("--- OE-QUALITAET & SAISON ---")
+	check(gm.regions["Texas"].has("oil_quality"), "Regionen haben Öl-Qualität")
+	check(gm.get_region_quality_factor("Texas") in [1.15, 1.0, 0.85], "Qualitätsfaktor gültig")
+	check(gm.get_region_quality_name("Nordsee") != "", "Qualitätsname vorhanden")
+	var old_month = gm.date["month"]
+	gm.date["month"] = 1
+	check(gm.get_seasonal_price_factor() == 1.12, "Winter: Heizöl-Aufschlag x1.12")
+	gm.date["month"] = 4
+	check(gm.get_seasonal_price_factor() == 1.0, "Frühjahr: neutral x1.0")
+	gm.date["month"] = 7
+	check(gm.get_seasonal_price_factor() == 1.06, "Sommer: x1.06")
+	gm.date["month"] = old_month
+
+	print("--- MARKTLIMIT ---")
+	gm.date["month"] = 7
+	check(gm.get_current_sale_cap() == 3000000.0, "Juli: Sommer-Limit 3M bbl")
+	gm.date["year"] = 1973
+	gm.date["month"] = 11
+	check(gm.get_current_sale_cap() == 1000000.0, "Ölkrise 11/1973: Limit 1M bbl")
+	gm.date["year"] = 1975
+	gm.date["month"] = 3
+	check(gm.get_current_sale_cap() == 0.0, "Normale Monate: kein Limit")
+	gm.finish_month()
+	gm.monthly_sale_limit = 1000000.0
+	gm.monthly_sold = 0.0
+	gm.spot_sales_history.clear()
+	gm.oil_stored["Texas"] = 2000000
+	gm.commit_sale("Texas", 800000, 0, true)
+	check(gm.monthly_sold == 800000.0, "Verkauf unter Limit gebucht")
+	gm.spot_sales_history.clear()
+	gm.commit_sale("Texas", 400000, 0, true)
+	check(gm.monthly_sold == 800000.0, "Verkauf über Limit blockiert")
+	check(gm.oil_stored["Texas"] == 1200000, "Öl bleibt bei blockiertem Verkauf im Tank")
+
+	print("--- RAFFINERIE ---")
+	gm.facilities["refinery"]["built"] = true
+	gm.current_era = 1
+	gm.monthly_refined_sold = 0.0
+	gm.spot_sales_history.clear()
+	gm.commit_sale("Texas", 200000, 0, true, true)
+	check(gm.monthly_refined_sold == 200000.0, "Raffinerie-Verkauf gebucht")
+	gm.spot_sales_history.clear()
+	gm.monthly_refined_sold = 290000.0
+	gm.commit_sale("Texas", 50000, 0, true, true)
+	check(gm.monthly_refined_sold == 290000.0, "Raffinerie-Kapazität (300k/Monat) begrenzt")
+	gm.facilities["refinery"]["built"] = false
+	gm.current_era = 0
+
+	print("--- PIPELINE-NETZ ---")
+	gm.pipeline_network_level = 0
+	gm.cash = 100000000
+	gm.build_facility("pipeline_net")
+	check(gm.pipeline_network_level == 0, "Pipeline-Netz Stufe 1 erst ab 1980er-Ära")
+	gm.current_era = 1
+	gm.build_facility("pipeline_net")
+	check(gm.pipeline_network_level == 1, "Pipeline-Netz Stufe 1 gebaut")
+	var bbl = 50000.0
+	var expected_risk = (0.15 + min(0.30, bbl / 1000000.0 * 0.10)) * (1.0 - 0.15 * 1.0)
+	check(expected_risk < 0.15 + min(0.30, bbl / 1000000.0 * 0.10), "Netz-Stufe senkt Leitungsrisiko")
+	gm.pipeline_network_level = 0
+	gm.current_era = 0
+
+	print("--- SPIELENDE-AUSWERTUNG ---")
+	var summary = gm._build_end_summary()
+	check(summary.has("score") and summary.get("score", 0) > 0, "Endsummary mit Score erzeugt")
+	check(summary.has("company") and summary.has("achievements"), "Endsummary enthält Firmen-/Erfolgsdaten")
+
 	print("")
 	if failures == 0:
 		print("ALLE WIRTSCHAFTS-TESTS BESTANDEN")

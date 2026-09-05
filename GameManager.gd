@@ -132,7 +132,26 @@ var computer_nav_mode: String = ""
 var pending_sale_region: String = ""
 var pending_sale_value: float = 0.0
 var pending_sale_amount: float = 0.0
+var pending_sale_refined: bool = false
 var pending_sale_return_scene: String = "res://Office.tscn"
+
+# --- MAERKTE: Qualitaet, Saison, Limits, Raffinerie, Pipeline-Netz ---
+var pipeline_network_level: int = 0
+var monthly_sold: float = 0.0
+var monthly_refined_sold: float = 0.0
+var monthly_sale_limit: float = 0.0
+var game_ended_emitted: bool = false
+
+signal game_ended(summary)
+
+const PIPELINE_NET_COSTS = {0: 2500000.0, 1: 6000000.0, 2: 15000000.0}
+const REFINERY_MONTHLY_CAPACITY = 300000.0
+# Historische Nachfrage-Einbrueche: year -> {month -> Limit in bbl}
+const EVENT_SALE_CAPS = {
+        1973: {10: 1200000.0, 11: 1000000.0, 12: 1000000.0},   # Erste Oelkrise / Embargo
+        1979: {6: 1500000.0, 7: 1200000.0, 8: 1200000.0, 9: 1500000.0},  # Zweite Oelkrise
+        1990: {9: 2000000.0, 10: 2000000.0}                    # Golfkrieg
+}
 
 # Hauptquartier
 var hq_city = "Houston"
@@ -738,6 +757,11 @@ func finish_month():
         # Spot-Verkäufe: 1x pro Monat und Region erlaubt
         spot_sales_history.clear()
 
+        # Nachfrage-Limit und Verkaufszaehler des neuen Monats
+        monthly_sold = 0.0
+        monthly_refined_sold = 0.0
+        monthly_sale_limit = get_current_sale_cap()
+
         # Tankkosten abrechnen
         for r_name in regions:
                 var cap = tank_capacity.get(r_name, 0)
@@ -806,12 +830,43 @@ func finish_month():
         if date["month"] > 12:
                 date["month"] = 1
                 date["year"] += 1
-                
+
+        # Spielende nach 30 Jahren: Auswertung am 01.01.2001
+        if date["year"] >= 2001 and not game_ended_emitted:
+                game_ended_emitted = true
+                game_ended.emit(_build_end_summary())
+                save_game(current_save_slot)
+                month_ended.emit({})
+                notify_update()
+                return
+
         _init_finance_tracker()
-        save_game(current_save_slot) 
-        
-        month_ended.emit({}) 
+        save_game(current_save_slot)
+
+        month_ended.emit({})
         notify_update()
+
+func _build_end_summary() -> Dictionary:
+        var assets = 0.0
+        for r_name in tank_investment:
+                assets += tank_investment.get(r_name, 0.0)
+        for fid in facilities:
+                if facilities[fid].get("built", false):
+                        assets += facilities[fid].get("cost", 0.0) * 0.5
+        var achievement_count = 0
+        if achievement_manager:
+                achievement_count = achievement_manager.get_unlocked_count()
+        var score = cash + assets + achievement_count * 250000.0 + (current_era + 1) * 2000000.0
+        return {
+                "score": int(score),
+                "cash": int(cash),
+                "assets": int(assets),
+                "achievements": achievement_count,
+                "era": current_era,
+                "year": date["year"],
+                "company": company_name,
+                "player": player_name,
+        }
 
 # --- HELPER FUNCTIONS FÜR EXTERNE SIGNALE (CONTRACTS) ---
 func emit_contract_signed(type, info):
@@ -844,26 +899,87 @@ func try_buy_license(r):
         return false
 
 # VERKAUFS-LOGIK
-func commit_sale(r, amount, value, bypass_minigame: bool = false):
+func get_region_quality_factor(r) -> float:
+        var q = regions.get(r, {}).get("oil_quality", "medium")
+        match q:
+                "light": return 1.15
+                "heavy": return 0.85
+                _: return 1.0
+
+func get_region_quality_name(r) -> String:
+        var q = regions.get(r, {}).get("oil_quality", "medium")
+        match q:
+                "light": return "Light Sweet (+15%)"
+                "heavy": return "Heavy Sour (-15%)"
+                _: return "Medium"
+
+func get_seasonal_price_factor() -> float:
+        # Heizsaison im Winter, Reisesaison im Sommer
+        match date["month"]:
+                12, 1, 2: return 1.12
+                6, 7, 8: return 1.06
+                _: return 1.0
+
+func get_current_sale_cap() -> float:
+        # Historische Krisen dämpfen die Nachfrage, im Sommer bricht Heizöl ein
+        var caps = EVENT_SALE_CAPS.get(date["year"], {})
+        if caps.has(date["month"]):
+                return float(caps[date["month"]])
+        if date["month"] == 7:
+                return 3000000.0
+        return 0.0
+
+func get_sale_price_per_bbl(r, refined: bool = false) -> float:
+        var factor = get_region_quality_factor(r) * get_seasonal_price_factor()
+        factor *= 1.0 + 0.02 * pipeline_network_level
+        if refined and facilities.get("refinery", {}).get("built", false):
+                factor *= 1.4
+        return oil_price * factor
+
+func commit_sale(r, amount, _value, bypass_minigame: bool = false, refined: bool = false):
         if spot_sales_history.get(r, false):
                 if has_node("/root/FeedbackOverlay"):
                         get_node("/root/FeedbackOverlay").show_msg("MARKT GESCHLOSSEN: Verkaufslimit für " + r + " erreicht!\n(1 Verkauf pro Region und Monat)", Color.RED)
                 return
 
-        if oil_stored[r] < amount:
+        if oil_stored.get(r, 0.0) < amount:
                 if has_node("/root/FeedbackOverlay"):
                         get_node("/root/FeedbackOverlay").show_msg("Nicht genug Öl in den Tanks von " + r + "!", Color.RED)
                 return
 
-        # Große Verkäufe sind riskanter: Pipeline kann versagen
-        var pipeline_risk = 0.15 + min(0.30, amount / 1000000.0 * 0.10)
+        # Nachfrage-Limit des Monats (Krisen/Sommer)
+        if monthly_sale_limit > 0.0 and monthly_sold + amount > monthly_sale_limit:
+                var remaining = max(0.0, monthly_sale_limit - monthly_sold)
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("NACHFRAGE-DÄMPFER: Marktlimit %s bbl diesen Monat!\n(übrig: %s bbl)" % [format_cash(monthly_sale_limit), format_cash(remaining)], Color.ORANGE)
+                return
+
+        # Raffinerie-Verkauf
+        if refined:
+                if not facilities.get("refinery", {}).get("built", false):
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("Keine Raffinerie vorhanden!", Color.RED)
+                        return
+                if monthly_refined_sold + amount > REFINERY_MONTHLY_CAPACITY:
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("RAFFINERIE AUSLASTET: max. %s bbl/Monat!" % format_cash(REFINERY_MONTHLY_CAPACITY), Color.ORANGE)
+                        return
+
+        var value = amount * get_sale_price_per_bbl(r, refined)
+
+        # Große Verkäufe sind riskanter; eigenes Pipeline-Netz senkt das Risiko
+        var pipeline_risk = (0.15 + min(0.30, amount / 1000000.0 * 0.10)) * (1.0 - 0.15 * pipeline_network_level)
         if not bypass_minigame and amount > 1000.0 and randf() < pipeline_risk:
+                pending_sale_refined = refined
                 start_pipeline_minigame(r, amount, value)
                 return
 
         oil_stored[r] -= amount
         book_transaction(r, value, "Spot Sales")
         spot_sales_history[r] = true
+        monthly_sold += amount
+        if refined:
+                monthly_refined_sold += amount
         if has_node("/root/FeedbackOverlay"):
                 get_node("/root/FeedbackOverlay").show_msg("VERKAUF ERFOLGREICH: +$" + format_cash(value), Color.GREEN)
         if sound_manager:
@@ -954,6 +1070,10 @@ func _show_pipeline_choice():
                 oil_stored[pending_sale_region] -= amt
                 book_transaction(pending_sale_region, val, "Spot Sales")
                 spot_sales_history[pending_sale_region] = true
+                monthly_sold += amt
+                if pending_sale_refined:
+                        monthly_refined_sold += amt
+                pending_sale_refined = false
                 pending_sale_region = ""; pending_sale_value = 0.0; pending_sale_amount = 0.0
                 if has_node("/root/FeedbackOverlay"):
                         get_node("/root/FeedbackOverlay").show_msg("Notfall-Team hat die Leitung repariert.\nVERKAUF ERFOLGREICH: +$" + format_cash(val), Color.GREEN)
@@ -976,6 +1096,9 @@ func finalize_sale_success():
                 oil_stored[r] -= amt
                 book_transaction(r, val, "Spot Sales")
                 spot_sales_history[r] = true
+                monthly_sold += amt
+                if pending_sale_refined:
+                        monthly_refined_sold += amt
                 if has_node("/root/FeedbackOverlay"):
                         get_node("/root/FeedbackOverlay").show_msg("VERKAUF ERFOLGREICH: +$" + format_cash(val), Color.GREEN)
                 if sound_manager:
@@ -985,6 +1108,7 @@ func finalize_sale_success():
         pending_sale_region = ""
         pending_sale_value = 0.0
         pending_sale_amount = 0.0
+        pending_sale_refined = false
 
 func finalize_sale_fail():
         var r = pending_sale_region
@@ -996,6 +1120,7 @@ func finalize_sale_fail():
         pending_sale_region = ""
         pending_sale_value = 0.0
         pending_sale_amount = 0.0
+        pending_sale_refined = false
 
 func sell_tanks(r):
         var val = get_tank_sell_value(r)
@@ -1008,11 +1133,42 @@ func sell_tanks(r):
 
 func build_facility(fid):
         if not facilities.has(fid): return
+        if fid == "refinery" and current_era < 1:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Raffinerie erst ab der 1980er-Ära verfügbar!", Color.ORANGE)
+                return
+        if fid == "pipeline_net":
+                if pipeline_network_level >= 3:
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("Pipeline-Netz komplett ausgebaut (Stufe 3)!", Color.WHITE)
+                        return
+                if current_era < pipeline_network_level + 1:
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("Pipeline-Netz Stufe %d erst ab der %s!" % [pipeline_network_level + 1, ["1980ern", "1990ern", "2000ern"][pipeline_network_level]], Color.ORANGE)
+                        return
+                var net_cost = PIPELINE_NET_COSTS[pipeline_network_level] * inflation_rate
+                if cash < net_cost:
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("Zu wenig Geld! Benötigt: $" + format_cash(net_cost), Color.RED)
+                        return
+                cash -= net_cost
+                pipeline_network_level += 1
+                facilities[fid]["built"] = true
+                book_transaction("Global", -net_cost, "Pipeline-Netz Stufe %d" % pipeline_network_level)
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("PIPELINE-NETZ AUSGEBAUT: Stufe %d\n(+%d%% Preis, -%d%% Leitungsrisiko)" % [pipeline_network_level, pipeline_network_level * 2, pipeline_network_level * 15], Color.GREEN)
+                notify_update()
+                return
         var cost = facilities[fid]["cost"] * inflation_rate
         if cash >= cost:
                 facilities[fid]["built"] = true
                 book_transaction("Global", -cost, "Construction")
+                if fid == "refinery" and has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("RAFFINERIE FERTIG GESTELLT!\nRaffinierter Verkauf möglich (+40% Preis, max. %s bbl/Monat)" % format_cash(REFINERY_MONTHLY_CAPACITY), Color.GREEN)
                 notify_update()
+        else:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Zu wenig Geld! Benötigt: $" + format_cash(cost), Color.RED)
 
 func start_research(tid):
         var tech = tech_database[tid]
@@ -1241,6 +1397,7 @@ func save_game(slot_name: String = "1"):
                         "company": company_name,
                         "cash": cash,
                         "logo": company_logo_path,
+                        "pipeline_net": pipeline_network_level,
                         "office_id": current_office_id,
                         "hq": hq_city,
                         "story_mode": story_mode_enabled,
@@ -1321,6 +1478,7 @@ func load_game(slot_name: String = "1"):
                 company_name = data.player.get("company", "Unknown")
                 cash = data.player.get("cash", 5000000.0)
                 company_logo_path = data.player.get("logo", "")
+                pipeline_network_level = int(data.player.get("pipeline_net", 0))
                 current_office_id = data.player.get("office_id", 0)
                 hq_city = data.player.get("hq", "Houston")
                 story_mode_enabled = data.player.get("story_mode", false)
@@ -1593,6 +1751,19 @@ func upgrade_era():
         return false
 
 func generate_claims():
+        # Öl-Qualität je Region (bleibt für die ganze Partie bestehen; Offshore tendiert zu Light Sweet)
+        var quality_rng = RandomNumberGenerator.new()
+        quality_rng.seed = 1970
+        for r in regions:
+                var offshore = regions[r].get("offshore_ratio", 0.0)
+                var roll = quality_rng.randf()
+                if offshore >= 0.5:
+                        regions[r]["oil_quality"] = "light" if roll < 0.7 else "medium"
+                elif offshore >= 0.1:
+                        regions[r]["oil_quality"] = "light" if roll < 0.35 else ("medium" if roll < 0.8 else "heavy")
+                else:
+                        regions[r]["oil_quality"] = "medium" if roll < 0.55 else "heavy"
+
         for r in regions:
                 if regions[r] == null:
                         regions[r] = { "claims": [] }

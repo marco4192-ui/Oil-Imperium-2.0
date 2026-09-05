@@ -41,7 +41,9 @@ const FACILITIES_TEMPLATE = {
         "lab": { "name": "Forschungslabor", "desc": "Grundlagenforschung.", "cost": 500000, "maintenance": 100.0, "built": false },
         "drill_ground": { "name": "Bohr-Testgelände", "desc": "Crew-Training & Bohrköpfe.", "cost": 800000, "maintenance": 150.0, "built": false },
         "workshop": { "name": "Ingenieurs-Werkstatt", "desc": "Pumpen & Sicherheit.", "cost": 600000, "maintenance": 120.0, "built": false },
-        "test_site": { "name": "Belastungs-Testgelände", "desc": "Extreme Umweltbedingungen.", "cost": 1200000, "maintenance": 300.0, "built": false }
+        "test_site": { "name": "Belastungs-Testgelände", "desc": "Extreme Umweltbedingungen.", "cost": 1200000, "maintenance": 300.0, "built": false },
+        "refinery": { "name": "Raffinerie", "desc": "Veredelt Rohöl zu Produkten: +40% Verkaufspreis, max. 300k bbl/Monat. Ab 1980er-Ära.", "cost": 8000000, "maintenance": 2500.0, "built": false },
+        "pipeline_net": { "name": "Pipeline-Netz", "desc": "3 Stufen: je +2% Preis und -15% Leitungsrisiko. Stufe 1 ab 1980ern, 2 ab 1990ern, 3 ab 2000ern.", "cost": 2500000, "maintenance": 800.0, "built": false }
 }
 
 const TECH_DATABASE = {

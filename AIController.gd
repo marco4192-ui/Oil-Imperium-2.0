@@ -99,10 +99,13 @@ func _cost_mult() -> float:
                 return 1.0
         return DIFFICULTY_COST_MULT.get(game_manager.difficulty_level, 1.0)
 
+var ai_monthly_sold_total := 0.0   # KI-Anteil am monatlichen Marktlimit
+
 func process_ai_turn():
         if game_manager == null: return
 
         print("\n--- KI ZUG BEGINNT ---")
+        ai_monthly_sold_total = 0.0
 
         for bot in competitors:
                 _process_bot_economy(bot)
@@ -175,13 +178,22 @@ func _process_bot_economy(bot):
                         bot["storage"][region_name] = stored + monthly
                         claim["reserves_remaining"] -= monthly
 
-        # 5) Verkauf: 1x pro Monat und Region, zum Marktpreis mit kleinem Abschlag
+        # 5) Verkauf: 1x pro Monat und Region, mit Qualitaet/Saison wie beim Spieler
+        #    plus kleinem Abschlag (die KI umgeht kein Minigame, hat aber kein Netz/Raffinerie-Bonus)
         for region_name in bot["storage"].keys():
                 var stored = bot["storage"].get(region_name, 0.0)
                 if stored < 1000.0: continue
-                var value = stored * game_manager.oil_price * AI_SALE_PRICE_FACTOR
+                var sale = stored
+                var cap = game_manager.get_current_sale_cap() * 0.6
+                if cap > 0.0:
+                        sale = min(sale, max(0.0, cap - ai_monthly_sold_total))
+                if sale < 1000.0: continue
+                var per_bbl = game_manager.get_region_quality_factor(region_name) \
+                        * game_manager.get_seasonal_price_factor() * game_manager.oil_price
+                var value = sale * per_bbl * AI_SALE_PRICE_FACTOR
                 bot["cash"] += value
-                bot["storage"][region_name] = 0.0
+                bot["storage"][region_name] = max(0.0, stored - sale)
+                ai_monthly_sold_total += sale
                 if value > 500000.0:
                         _log_ai(bot, game_manager.activity_feed.ACTIVITY_TYPE.AI_EXPANSION,
                                 {"region": region_name, "info": "Öl-Verkauf: $%s" % game_manager.format_cash(value)})
