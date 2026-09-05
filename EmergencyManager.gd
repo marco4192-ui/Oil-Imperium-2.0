@@ -60,7 +60,7 @@ const EMERGENCY_TYPES = {
 	"worker_strike": {
 		"id": "worker_strike",
 		"name": "Arbeiterstreik!",
-		"description": "Workers at %s are on strike! Production halted!",
+		"description": "Workers at %s, Claim #%d are on strike! Production halted!",
 		"icon": "✊",
 		"priority": 2,
 		"timeout_hours": 72,
@@ -128,7 +128,7 @@ const EMERGENCY_TYPES = {
 	"pipeline_leak": {
 		"id": "pipeline_leak",
 		"name": "Pipelineleck!",
-		"description": "Pipeline leak detected in %s! Environmental hazard!",
+		"description": "Pipeline leak at %s, Claim #%d! Environmental hazard!",
 		"icon": "🛢️",
 		"priority": 2,
 		"timeout_hours": 48,
@@ -156,7 +156,7 @@ const EMERGENCY_TYPES = {
 	"rig_accident": {
 		"id": "rig_accident",
 		"name": "Bohrinselunfall!",
-		"description": "Accident at rig in %s! Workers injured!",
+		"description": "Accident at rig in %s, Claim #%d! Workers injured!",
 		"icon": "⚠️",
 		"priority": 1,
 		"timeout_hours": 6,
@@ -186,7 +186,7 @@ const EMERGENCY_TYPES = {
 	"equipment_failure": {
 		"id": "equipment_failure",
 		"name": "Ausrüstungsversagen!",
-		"description": "Critical equipment failure at %s! Production stopped!",
+		"description": "Critical equipment failure at %s, Claim #%d! Production stopped!",
 		"icon": "🔧",
 		"priority": 3,
 		"timeout_hours": 96,

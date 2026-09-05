@@ -141,6 +141,8 @@ var monthly_sold: float = 0.0
 var monthly_refined_sold: float = 0.0
 var monthly_sale_limit: float = 0.0
 var game_ended_emitted: bool = false
+var end_screen_shown: bool = false
+var tank_hint_shown: bool = false
 
 signal game_ended(summary)
 
@@ -762,6 +764,15 @@ func finish_month():
         monthly_refined_sold = 0.0
         monthly_sale_limit = get_current_sale_cap()
 
+        # Hinweis: produzierende Region ohne Tank = kein Verkauf moeglich
+        if not tank_hint_shown:
+                for r_name in regions:
+                        if regions[r_name].get("unlocked", false) and get_region_daily_production(r_name) > 0 and tank_capacity.get(r_name, 0) == 0:
+                                tank_hint_shown = true
+                                if has_node("/root/FeedbackOverlay"):
+                                        get_node("/root/FeedbackOverlay").show_msg("WICHTIG: Ohne Tanklager kann dein Öl nicht verkauft werden!\nBaue zuerst einen Tank in " + r_name + " (Computer → Tanks).", Color.ORANGE)
+                                break
+
         # Tankkosten abrechnen
         for r_name in regions:
                 var cap = tank_capacity.get(r_name, 0)
@@ -1164,7 +1175,7 @@ func build_facility(fid):
                 facilities[fid]["built"] = true
                 book_transaction("Global", -cost, "Construction")
                 if fid == "refinery" and has_node("/root/FeedbackOverlay"):
-                        get_node("/root/FeedbackOverlay").show_msg("RAFFINERIE FERTIG GESTELLT!\nRaffinierter Verkauf möglich (+40% Preis, max. %s bbl/Monat)" % format_cash(REFINERY_MONTHLY_CAPACITY), Color.GREEN)
+                        get_node("/root/FeedbackOverlay").show_msg("RAFFINERIE FERTIG GESTELLT!\nRaffinierter Verkauf möglich (+40%% Preis, max. %s bbl/Monat)" % format_cash(REFINERY_MONTHLY_CAPACITY), Color.GREEN)
                 notify_update()
         else:
                 if has_node("/root/FeedbackOverlay"):

@@ -106,7 +106,8 @@ const SECRET_DEAL_TYPES = [
 ]
 
 # --- HISTORICAL CRISIS EVENTS ---
-const HISTORICAL_CRISES = [
+# (var statt const: 'triggered' wird zur Laufzeit gesetzt; const-Dicts sind read-only)
+var HISTORICAL_CRISES = [
 	{
 		"year": 1973,
 		"month": 10,

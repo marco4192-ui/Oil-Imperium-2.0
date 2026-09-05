@@ -68,10 +68,10 @@ func _ready():
                 if GameManager.show_fire_options and not GameManager.pending_fire_event.is_empty():
                                 show_fire_options_dialog()
 
-                # Endauswertung nach 30 Jahren (01.01.2001)
+                # Endauswertung nach 30 Jahren (01.01.2001) — nur einmal pro Sitzung
                 if not GameManager.game_ended.is_connected(_on_game_ended):
                                 GameManager.game_ended.connect(_on_game_ended)
-                if GameManager.game_ended_emitted:
+                if GameManager.game_ended_emitted and not GameManager.end_screen_shown:
                                 _on_game_ended(GameManager._build_end_summary())
                 
                 # Connect phone ringing signal for visual feedback
@@ -194,7 +194,12 @@ func show_help():
                 help_text += "$ = Kredite\n"
                 help_text += "1-9 = Schnellauswahl Region\n"
                 help_text += "H = Diese Hilfe"
-                
+                help_text += "\n\n=== MARKT-TIPPS ==="
+                help_text += "\nVerkauf: 1x pro Monat und Region — im Sommer und in Krisen gilt ein Marktlimit"
+                help_text += "\nÖl-Qualität der Region und Saison beeinflussen den Preis: Timing lohnt sich"
+                help_text += "\nRaffinerie (ab 1980ern) verkauft mit +40% Preis; Pipeline-Netz senkt Risiko"
+                help_text += "\nBlowout nach eigener Bohrung? Ted Redhair löscht per Dynamit!"
+
                 if has_node("/root/FeedbackOverlay"):
                                 get_node("/root/FeedbackOverlay").show_msg(help_text, Color.CYAN)
 
@@ -232,6 +237,7 @@ func _on_era_upgraded(_next_era: int):
 # --- ENDAUSWERTUNG & HALL OF FAME (nach 30 Jahren) ---
 # ==============================================================================
 func _on_game_ended(summary: Dictionary):
+                GameManager.end_screen_shown = true
                 if has_node("/root/FeedbackOverlay"):
                                 get_node("/root/FeedbackOverlay").show_msg("30 JAHRE VORBEI!\nDie Endabrechnung wartet...", Color(1.0, 0.85, 0.3))
                 var layer = CanvasLayer.new()

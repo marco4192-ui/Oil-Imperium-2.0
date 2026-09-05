@@ -20,17 +20,17 @@ const ENVIRONMENTAL_REGULATIONS = {
 	1: {  # 1980s
 		"penalty_mult": 2.0,
 		"spill_penalty_per_barrel": 500,
-		"inspection_freq": 0.05
+		"inspection_freq": 0.04
 	},
 	2: {  # 1990s
-		"penalty_mult": 5.0,
+		"penalty_mult": 4.0,
 		"spill_penalty_per_barrel": 2000,
-		"inspection_freq": 0.08
+		"inspection_freq": 0.06
 	},
 	3: {  # 2000s+
-		"penalty_mult": 10.0,
+		"penalty_mult": 6.0,
 		"spill_penalty_per_barrel": 10000,
-		"inspection_freq": 0.12
+		"inspection_freq": 0.08
 	}
 }
 
@@ -224,7 +224,7 @@ func attempt_bribe(case_id: String) -> Dictionary:
 # ==============================================================================
 
 func _trigger_mob_attack(region: String):
-	var damage = randf_range(1000000, 10000000)
+	var damage = randf_range(500000, 3000000)
 	game_manager.cash -= damage
 	game_manager.book_transaction(region, -damage, "Mob-Angriff")
 	

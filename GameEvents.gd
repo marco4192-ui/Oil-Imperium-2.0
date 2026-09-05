@@ -248,7 +248,9 @@ func trigger_random_event(gm, e):
                 var victims = []
                 for r_name in gm.regions:
                         for claim in gm.regions[r_name]["claims"]:
-                                if claim["owned"] and claim["drilled"] and claim["has_oil"]:
+                                if claim == null or typeof(claim) != TYPE_DICTIONARY: continue
+                                if claim.get("is_empty", false): continue
+                                if claim.get("owned", false) and claim.get("drilled", false) and claim.get("has_oil", false):
                                         victims.append(claim)
                 if victims.is_empty(): return 
                 var target = victims.pick_random()

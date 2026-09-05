@@ -65,9 +65,11 @@ var competitors = [
 # --- STRATEGISCHE KONSTANTEN ---
 const MIN_RESERVE_CASH = 2000000       # Notreserve, ähnlich wie ein Spieler haushalten würde
 const MAX_CLAIMS_PER_REGION = 2        # keine Regionen-Monopolisierung
+const MAX_WELLS_PER_BOT = 10           # Kapazitätsgrenze der KI-Firma
+const EXPANSION_COOLDOWN_MONTHS = 2    # max. 1 Feldkauf alle 2 Monate
 const DRILL_MONTHS = 3                 # gleiche Bohrdauer wie beim Spieler (90 Tage)
-const AI_SALE_PRICE_FACTOR = 0.92      # KI verkauft ohne Minigame, dafür mit kleinem Abschlag
-const AI_EFFICIENCY = 0.85             # Förderwirkungsgrad der KI-Crews
+const AI_SALE_PRICE_FACTOR = 0.85      # KI verkauft ohne Minigame, mit Abschlag + Betriebsrisiko
+const AI_EFFICIENCY = 0.75             # Förderwirkungsgrad der KI-Crews
 const AI_DRILL_COST_FACTOR = 1.1       # Profi-Crews: teurer als Selbstbau, ohne Premium-Aufschlag
 
 # Schwierigkeitsabhängige Skalierung (0=Easy, 1=Normal, 2=Hard, 3=Brutal)
@@ -108,6 +110,7 @@ func process_ai_turn():
         ai_monthly_sold_total = 0.0
 
         for bot in competitors:
+                bot["expansion_cooldown"] = max(0, bot.get("expansion_cooldown", 0) - 1)
                 _process_bot_economy(bot)
                 _process_projects(bot)
                 _calculate_budget(bot)
@@ -194,6 +197,8 @@ func _process_bot_economy(bot):
                 bot["cash"] += value
                 bot["storage"][region_name] = max(0.0, stored - sale)
                 ai_monthly_sold_total += sale
+                # Betriebsrisiko: Unfaelle/Wartung fressen 10% des Verkaufserloeses
+                bot["cash"] -= value * 0.10
                 if value > 500000.0:
                         _log_ai(bot, game_manager.activity_feed.ACTIVITY_TYPE.AI_EXPANSION,
                                 {"region": region_name, "info": "Öl-Verkauf: $%s" % game_manager.format_cash(value)})
@@ -227,6 +232,10 @@ func _calculate_budget(bot):
 func _smart_expansion(bot):
         if bot["monthly_budget"] < 100000:
                 return  # Not enough budget
+        if bot.get("expansion_cooldown", 0) > 0:
+                return  # max. 1 Feldkauf alle 2 Monate
+        if bot["inventory"].size() >= MAX_WELLS_PER_BOT:
+                return  # Firmen-Kapazität erreicht
 
         # Step 1: Find best region to expand
         var best_region = _evaluate_best_region(bot)
@@ -273,6 +282,7 @@ func _smart_expansion(bot):
                 bot["owned_regions"][best_region] = 0
         bot["owned_regions"][best_region] += 1
         bot["monthly_budget"] -= price + drill_cost
+        bot["expansion_cooldown"] = EXPANSION_COOLDOWN_MONTHS
 
         print(">>> " + bot["name"] + " KAUFT UND BOHRT in " + best_region + " (Feld: $" + str(int(price)) + ", Bohrung: $" + str(int(drill_cost)) + ", " + str(DRILL_MONTHS) + " Monate)")
 

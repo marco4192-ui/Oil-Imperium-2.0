@@ -137,7 +137,8 @@ func _apply_theft(gm, region, result, is_player_attacker, data):
 	if data.has("steal_percentages") and typeof(data["steal_percentages"]) == TYPE_ARRAY:
 		steal_percent = data["steal_percentages"].pick_random()
 		
-	var stolen = int(stored * steal_percent)
+	# Logistikgrenze: pro Anschlag lassen sich max. 150k bbl abziehen
+	var stolen = min(int(stored * steal_percent), 150000)
 	gm.oil_stored[region] -= stolen
 	result.stolen_amount = stolen
 	
