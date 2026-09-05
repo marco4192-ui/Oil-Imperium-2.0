@@ -1,0 +1,136 @@
+extends SceneTree
+# test_economy.gd - Integrationstest für Wirtschaft, Verkaufslimit, Pipeline, KI-Parität
+# Ausführen: godot --headless --path . --script res://test_economy.gd
+
+var failures := 0
+
+func check(cond: bool, label: String):
+	if cond:
+		print("  OK   ", label)
+	else:
+		failures += 1
+		printerr("  FAIL ", label)
+
+func _init():
+	await process_frame
+	await process_frame
+
+	var gm = root.get_node_or_null("/root/GameManager")
+	check(gm != null, "GameManager Autoload vorhanden")
+	if gm == null:
+		quit(1)
+		return
+
+	print("--- TANK-STAFFELPREISE ---")
+	check(gm.get_tank_cost(250000) == 500000, "Starter-Tank 250k bbl = $500.000 (%s)" % gm.get_tank_cost(250000))
+	check(gm.get_tank_cost(500000) == 1300000, "Kleiner Tank 500k bbl = $1.300.000")
+	check(gm.get_tank_cost(1000000) == 3200000, "Mittlerer Tank 1M bbl = $3.200.000")
+	check(gm.get_tank_cost(2500000) == 9000000, "Großer Tank 2.5M bbl = $9.000.000")
+
+	print("--- VERKAUFS-LIMIT (1x/Monat/Region) ---")
+	gm.spot_sales_history.clear()
+	gm.oil_stored["Texas"] = 100000
+	gm.commit_sale("Texas", 50000, 400000, true)
+	check(gm.oil_stored["Texas"] == 50000, "Erster Verkauf erfolgreich")
+	check(gm.spot_sales_history.get("Texas", false) == true, "Region nach Verkauf gesperrt")
+	var cash_before = gm.cash
+	gm.commit_sale("Texas", 10000, 80000, true)
+	check(gm.oil_stored["Texas"] == 50000, "Zweiter Verkauf im selben Monat blockiert")
+	check(gm.cash == cash_before, "Keine Abbuchung beim blockierten Verkauf")
+
+	gm.finish_month()
+	check(gm.spot_sales_history.get("Texas", false) == false, "Verkaufslimit nach Monatswechsel zurückgesetzt")
+	gm.commit_sale("Texas", 10000, 80000, true)
+	check(gm.oil_stored["Texas"] == 40000, "Verkauf im neuen Monat wieder möglich")
+
+	print("--- PIPELINE-FLOW ---")
+	gm.spot_sales_history.clear()
+	gm.oil_stored["Texas"] = 100000
+	gm.start_pipeline_minigame("Texas", 30000, 250000)
+	check(gm.pending_sale_region == "Texas", "Pipeline-Minigame pending gesetzt")
+	check(gm.pending_sale_return_scene != "", "Rückkehr-Szene gemerkt")
+	gm.finalize_sale_fail()
+	check(gm.spot_sales_history.get("Texas", false) == true, "Gescheiterter Verkauf sperrt Region für den Monat")
+	check(gm.oil_stored["Texas"] == 100000, "Öl bleibt beim Scheitern im Tank")
+	check(gm.pending_sale_region == "", "Pending nach Fail geleert")
+	gm.finalize_sale_success()  # darf leer laufen
+
+	gm.spot_sales_history.clear()
+	gm.pending_sale_region = "Texas"
+	gm.pending_sale_amount = 30000
+	gm.pending_sale_value = 250000
+	var c0 = gm.cash
+	gm.finalize_sale_success()
+	check(gm.cash == c0 + 250000, "Erfolgreicher Verkauf bucht Erlös")
+	check(gm.oil_stored["Texas"] == 70000, "Nur die verkaufte Menge wird abgezogen")
+	check(gm.pending_sale_region == "", "Pending nach Erfolg geleert")
+
+	print("--- NOTFALL-TEAM ---")
+	gm.spot_sales_history.clear()
+	gm.oil_stored["Texas"] = 100000
+	gm.pending_sale_region = "Texas"
+	gm.pending_sale_amount = 30000
+	gm.pending_sale_value = 250000
+	# Simuliere den Notfall-Team-Pfad (wie im Choice-Dialog)
+	var team_cost = int(gm.PIPELINE_EMERGENCY_TEAM_COST * gm.inflation_rate)
+	gm.cash -= team_cost
+	gm.oil_stored["Texas"] -= gm.pending_sale_amount
+	gm.spot_sales_history["Texas"] = true
+	gm.pending_sale_region = ""
+	check(gm.spot_sales_history.get("Texas", false) == true, "Notfall-Team: Verkauf abgeschlossen")
+	check(team_cost >= 150000, "Notfall-Team kostet mind. $150.000 (inkl. Inflation: $%d)" % team_cost)
+
+	print("--- KI: WIRTSCHAFTSPARITÄT ---")
+	var ai = gm.ai_controller
+	check(ai != null, "AIController vorhanden")
+	if ai != null:
+		check(ai.competitors.size() == 3, "3 KI-Gegner")
+		for bot in ai.competitors:
+			check(bot.has("projects") and bot.has("storage") and bot.has("tanks"), "KI-Statusfelder vorhanden")
+
+		gm.date["year"] = 1975
+		for i in range(8):
+			ai.process_ai_turn()
+
+		var total_claims = 0
+		var drilled = 0
+		var running_projects = 0
+		for bot in ai.competitors:
+			total_claims += bot["inventory"].size()
+			running_projects += bot["projects"].size()
+			for claim in bot["inventory"]:
+				if claim != null and typeof(claim) == TYPE_DICTIONARY and claim.get("drilled", false):
+					drilled += 1
+			for r_name in bot["owned_regions"].keys():
+				check(bot["owned_regions"][r_name] <= ai.MAX_CLAIMS_PER_REGION,
+						"Max. " + str(ai.MAX_CLAIMS_PER_REGION) + " Claims pro Region (" + bot["name"] + " in " + str(r_name) + ": " + str(bot["owned_regions"][r_name]) + ")")
+		print("  (KI nach 8 Monaten: Claims=" + str(total_claims) + ", gebohrt=" + str(drl_str(drilled)) + ", laufende Bohrungen=" + str(running_projects) + ")")
+		check(total_claims > 0, "KI kauft Claims")
+		check(drilled <= total_claims, "Bohrstatus konsistent")
+		check(running_projects <= total_claims, "Projekte konsistent")
+
+	print("--- FEUERSCHADEN ---")
+	var fire_claim = null
+	for claim in gm.regions["Texas"]["claims"]:
+		if claim != null and typeof(claim) == TYPE_DICTIONARY and not claim.get("is_empty", false):
+			fire_claim = claim
+			break
+	if fire_claim == null:
+		check(false, "Test-Claim in Texas gefunden")
+	else:
+		fire_claim["drilled"] = true
+		gm._apply_fire_damage("Texas", fire_claim["id"], 70.0, false)
+		check(fire_claim.get("fire_damage", 0) == 70.0, "Teilschaden wird vermerkt")
+		check(fire_claim.get("drilled", false) == true, "Teilschaden: Feld bleibt gebohrt")
+		gm._apply_fire_damage("Texas", fire_claim["id"], 100.0, true)
+		check(fire_claim.get("drilled", false) == false, "Totalschaden: Feld muss neu gebohrt werden")
+
+	print("")
+	if failures == 0:
+		print("ALLE WIRTSCHAFTS-TESTS BESTANDEN")
+	else:
+		printerr(str(failures) + " TESTS FEHLGESCHLAGEN")
+	quit(1 if failures > 0 else 0)
+
+func drl_str(v: int) -> String:
+	return str(v)

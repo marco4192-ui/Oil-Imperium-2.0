@@ -97,8 +97,9 @@ const COST_PIPELINE_KM = 8500.0
 const AVG_PIPELINE_DIST_KM = 5.0      
 const RIG_RATE_ONSHORE = 1800.0       
 const RIG_RATE_OFFSHORE = 9500.0     
-const SURVEY_COST = 8500 
-const LOGISTICS_SETUP_FEE = 5000.0 
+const SURVEY_COST = 8500
+const LOGISTICS_SETUP_FEE = 5000.0
+const PIPELINE_EMERGENCY_TEAM_COST = 150000.0
 
 const SAVE_PATH_BASE = "user://savegame_"
 
@@ -130,7 +131,8 @@ var computer_nav_mode: String = ""
 # Minigame Zwischenspeicher
 var pending_sale_region: String = ""
 var pending_sale_value: float = 0.0
-var pending_sale_amount: float = 0.0 
+var pending_sale_amount: float = 0.0
+var pending_sale_return_scene: String = "res://Office.tscn"
 
 # Hauptquartier
 var hq_city = "Houston"
@@ -733,6 +735,9 @@ func _simulate_oil_market():
         oil_price = clamp(oil_price, min_price, max_price)
         
 func finish_month():
+        # Spot-Verkäufe: 1x pro Monat und Region erlaubt
+        spot_sales_history.clear()
+
         # Tankkosten abrechnen
         for r_name in regions:
                 var cap = tank_capacity.get(r_name, 0)
@@ -842,41 +847,141 @@ func try_buy_license(r):
 func commit_sale(r, amount, value, bypass_minigame: bool = false):
         if spot_sales_history.get(r, false):
                 if has_node("/root/FeedbackOverlay"):
-                        get_node("/root/FeedbackOverlay").show_msg("MARKT GESCHLOSSEN: Verkaufslimit für " + r + " erreicht!", Color.RED)
+                        get_node("/root/FeedbackOverlay").show_msg("MARKT GESCHLOSSEN: Verkaufslimit für " + r + " erreicht!\n(1 Verkauf pro Region und Monat)", Color.RED)
                 return
 
-        if not bypass_minigame and amount > 1000.0 and randf() < 0.30:
+        if oil_stored[r] < amount:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Nicht genug Öl in den Tanks von " + r + "!", Color.RED)
+                return
+
+        # Große Verkäufe sind riskanter: Pipeline kann versagen
+        var pipeline_risk = 0.15 + min(0.30, amount / 1000000.0 * 0.10)
+        if not bypass_minigame and amount > 1000.0 and randf() < pipeline_risk:
                 start_pipeline_minigame(r, amount, value)
                 return
 
-        if oil_stored[r] >= amount:
-                oil_stored[r] -= amount
-                book_transaction(r, value, "Spot Sales")
-                spot_sales_history[r] = true
-                if has_node("/root/FeedbackOverlay"):
-                        get_node("/root/FeedbackOverlay").show_msg("VERKAUF ERFOLGREICH: +$" + format_cash(value), Color.GREEN)
+        oil_stored[r] -= amount
+        book_transaction(r, value, "Spot Sales")
+        spot_sales_history[r] = true
+        if has_node("/root/FeedbackOverlay"):
+                get_node("/root/FeedbackOverlay").show_msg("VERKAUF ERFOLGREICH: +$" + format_cash(value), Color.GREEN)
+        if sound_manager:
+                sound_manager.play_sound("money_gain")
+        notify_update()
 
 func start_pipeline_minigame(r, amount, value):
         pending_sale_region = r
         pending_sale_value = value
         pending_sale_amount = amount
-        
+        var current = get_tree().current_scene
+        if current and current.scene_file_path != "":
+                pending_sale_return_scene = current.scene_file_path
+
         if has_node("/root/FeedbackOverlay"):
-                get_node("/root/FeedbackOverlay").show_msg("ACHTUNG: PIPELINE PROBLEME! MANUELLE KONTROLLE NÖTIG!", Color.ORANGE)
-        
-        await get_tree().create_timer(1.5).timeout
+                get_node("/root/FeedbackOverlay").show_msg("ACHTUNG: PIPELINE PROBLEME!\nVerkauf von " + format_cash(amount) + " bbl blockiert.", Color.ORANGE)
+        _show_pipeline_choice()
+
+func _show_pipeline_choice():
+        # Wahl: selbst reparieren (Minigame, gratis, riskant) oder Notfall-Team (teuer, sicher)
+        var current = get_tree().current_scene
+        if current == null:
+                _open_pipeline_minigame()
+                return
+
+        var layer = CanvasLayer.new()
+        layer.layer = 120
+        layer.name = "PipelineChoiceLayer"
+        current.add_child(layer)
+
+        var dim = ColorRect.new()
+        dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+        dim.color = Color(0, 0, 0, 0.7)
+        layer.add_child(dim)
+
+        var panel = Panel.new()
+        panel.custom_minimum_size = Vector2(620, 300)
+        panel.set_anchors_preset(Control.PRESET_CENTER)
+        panel.offset_left = -310; panel.offset_right = 310
+        panel.offset_top = -150; panel.offset_bottom = 150
+        layer.add_child(panel)
+
+        var margin = MarginContainer.new()
+        margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+        for m in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+                margin.add_theme_constant_override(m, 24)
+        panel.add_child(margin)
+
+        var vbox = VBoxContainer.new()
+        vbox.add_theme_constant_override("separation", 14)
+        margin.add_child(vbox)
+
+        var title = Label.new()
+        title.text = "PIPELINE DEFEKT!"
+        title.add_theme_font_size_override("font_size", 26)
+        title.add_theme_color_override("font_color", Color(1.0, 0.5, 0.1))
+        vbox.add_child(title)
+
+        var info = Label.new()
+        var team_cost = int(PIPELINE_EMERGENCY_TEAM_COST * inflation_rate)
+        info.text = "Der Verkauf von %s bbl (%s) wartet auf die Reparatur der Leitung.\n\nSelbst reparieren: kostenlos, aber du musst das Ventil-Raster\nunter Zeitdruck selbst schließen. Scheiterst du, ist der Verkauf\ndieses Monats verloren.\n\nNotfall-Team: repariert sofort und sicher." % [format_cash(pending_sale_amount), format_cash(pending_sale_value)]
+        info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        vbox.add_child(info)
+
+        var row = HBoxContainer.new()
+        row.add_theme_constant_override("separation", 16)
+        row.alignment = BoxContainer.ALIGNMENT_CENTER
+        vbox.add_child(row)
+
+        var btn_self = Button.new()
+        btn_self.text = "SELBST REPARIEREN\n(Minigame, kostenlos)"
+        btn_self.custom_minimum_size = Vector2(240, 60)
+        btn_self.pressed.connect(func():
+                layer.queue_free()
+                _open_pipeline_minigame()
+        )
+        row.add_child(btn_self)
+
+        var btn_team = Button.new()
+        btn_team.text = "NOTFALL-TEAM RUFEN\n($%s, sicher)" % format_cash(team_cost)
+        btn_team.custom_minimum_size = Vector2(240, 60)
+        btn_team.disabled = cash < team_cost
+        btn_team.pressed.connect(func():
+                cash -= team_cost
+                book_transaction(pending_sale_region, -team_cost, "Pipeline Notfall-Team")
+                var amt = pending_sale_amount
+                var val = pending_sale_value
+                oil_stored[pending_sale_region] -= amt
+                book_transaction(pending_sale_region, val, "Spot Sales")
+                spot_sales_history[pending_sale_region] = true
+                pending_sale_region = ""; pending_sale_value = 0.0; pending_sale_amount = 0.0
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Notfall-Team hat die Leitung repariert.\nVERKAUF ERFOLGREICH: +$" + format_cash(val), Color.GREEN)
+                if sound_manager:
+                        sound_manager.play_sound("money_gain")
+                notify_update()
+                layer.queue_free()
+        )
+        row.add_child(btn_team)
+
+func _open_pipeline_minigame():
         get_tree().change_scene_to_file("res://PipelineClassic.tscn")
 
 func finalize_sale_success():
         var r = pending_sale_region
         var amt = pending_sale_amount
         var val = pending_sale_value
-        
-        if oil_stored.get(r, 0.0) >= amt:
+
+        if r != "" and amt > 0.0 and oil_stored.get(r, 0.0) >= amt:
                 oil_stored[r] -= amt
                 book_transaction(r, val, "Spot Sales")
-                spot_sales_history[r] = true 
-                
+                spot_sales_history[r] = true
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("VERKAUF ERFOLGREICH: +$" + format_cash(val), Color.GREEN)
+                if sound_manager:
+                        sound_manager.play_sound("money_gain")
+                notify_update()
+
         pending_sale_region = ""
         pending_sale_value = 0.0
         pending_sale_amount = 0.0
@@ -884,8 +989,10 @@ func finalize_sale_success():
 func finalize_sale_fail():
         var r = pending_sale_region
         if has_node("/root/FeedbackOverlay"):
-                get_node("/root/FeedbackOverlay").show_msg("VERKAUF ABGEBROCHEN! LEITUNG DEFEKT. Versuche es nächsten Monat.", Color.RED)
-        spot_sales_history[r] = true 
+                get_node("/root/FeedbackOverlay").show_msg("VERKAUF ABGEBROCHEN! LEITUNG DEFEKT.\nDas Öl bleibt in den Tanks — neuer Versuch nächsten Monat.", Color.RED)
+        if sound_manager:
+                sound_manager.play_sound("ui_error")
+        spot_sales_history[r] = true
         pending_sale_region = ""
         pending_sale_value = 0.0
         pending_sale_amount = 0.0
@@ -1444,7 +1551,17 @@ func get_survey_cost(region_name: String, is_offshore: bool) -> int:
         return int(calc["total"] * 0.15) 
 
 func get_tank_cost(size_capacity: int) -> int:
-        return int(size_capacity * TANK_BUILD_COST_PER_BBL * inflation_rate)
+        # Staffelpreise: kleine Tanks bewusst guenstig, damit der erste Speicher frueh machbar ist
+        var per_bbl = TANK_BUILD_COST_PER_BBL
+        if size_capacity <= 250000:
+                per_bbl = 2.0
+        elif size_capacity <= 500000:
+                per_bbl = 2.6
+        elif size_capacity <= 1000000:
+                per_bbl = 3.2
+        else:
+                per_bbl = 3.6
+        return int(size_capacity * per_bbl * inflation_rate)
 
 func get_tank_sell_value(r):
         var c = tank_capacity.get(r, 0)

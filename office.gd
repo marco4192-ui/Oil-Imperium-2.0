@@ -36,8 +36,13 @@ var selected_competitor_data = {}
 var tooltip_panel: PanelContainer
 var tooltip_label: Label
 
+# Persistente Aktionsleiste
+var action_bar: PanelContainer
+var bar_upgrade_btn: Button
+
 func _ready():
                 load_office_style()
+                _build_action_bar()
                 create_save_popup()
                 create_tutorial_popup()
                 create_sabotage_ui() 
@@ -211,6 +216,76 @@ func _show_upgrade_panel():
 
 func _on_era_upgraded(_next_era: int):
                 load_office_style()
+                check_upgrade_status()
+
+# ==============================================================================
+# --- PERSISTENTE AKTIONSLEISTE ---
+# Alle wichtigen Aktionen immer sichtbar und gleich groß, unabhängig vom
+# gekauften Büro-Stil. Die Tisch-Objekte bleiben zusätzlich erhalten.
+# ==============================================================================
+func _build_action_bar():
+                # Eigenes CanvasLayer, damit die Leiste über dem StatusPanel-Streifen liegt
+                var bar_layer = CanvasLayer.new()
+                bar_layer.name = "ActionBarLayer"
+                bar_layer.layer = 5
+                add_child(bar_layer)
+
+                action_bar = PanelContainer.new()
+                action_bar.name = "ActionBar"
+                action_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+                action_bar.offset_left = 8
+                action_bar.offset_right = -8
+                action_bar.offset_top = -148
+                action_bar.offset_bottom = -76
+                action_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+
+                var style = StyleBoxFlat.new()
+                style.bg_color = Color(0.08, 0.09, 0.12, 0.92)
+                style.border_color = Color(0.35, 0.38, 0.45)
+                style.set_border_width_all(2)
+                style.set_corner_radius_all(10)
+                action_bar.add_theme_stylebox_override("panel", style)
+                bar_layer.add_child(action_bar)
+
+                var row = HBoxContainer.new()
+                row.add_theme_constant_override("separation", 4)
+                row.alignment = BoxContainer.ALIGNMENT_CENTER
+                action_bar.add_child(row)
+
+                var actions = [
+                                ["Map", "KARTE (M)", "Karte und Regionen öffnen (Taste M)", func(): _on_btn_map_pressed()],
+                                ["Computer", "PC (C)", "Computer mit Maerkten, Forschung und Verkaeufen (Taste C)", func(): _on_btn_computer_pressed()],
+                                ["Newspaper", "ZEITUNG", "Aktuelle Nachrichten und Archiv", func(): _on_btn_newspaper_pressed()],
+                                ["Phone", "TELEFON", "Notrufe und Ereignisse", func(): _on_btn_phone_pressed()],
+                                ["Drawer", "AKTEN", "Aktenschrank", func(): _on_btn_drawer_pressed()],
+                                ["Briefcase", "TASCHE", "Aktentasche", func(): _on_btn_briefcase_pressed()],
+                                ["Upgrade", "UPGRADE", "Buerro-Upgrades und Aera-Wechsel", func(): _on_btn_upgrade_pressed()],
+                                ["Legal", "RECHT (R)", "Recht und Anwaelte: Verfahren, Bestechung, Compliance (Taste R)", func(): _show_legal_panel()],
+                                ["Achievements", "ERFOLGE (A)", "Erfolge anzeigen (Taste A)", func(): _show_achievements()],
+                                ["Log", "LOG (L)", "Aktivitaets-Log (Taste L)", func(): _show_activity_feed()],
+                                ["Finance", "FINANZ (F)", "Finanzbericht mit Charts (Taste F)", func(): _show_financial_report()],
+                                ["Loans", "KREDIT ($)", "Kreditzentrale (Taste $)", func(): _show_loan_menu()],
+                                ["Save", "SPEICHERN (S)", "Spiel speichern (Taste S)", func(): GameManager.save_game(GameManager.current_save_slot)],
+                                ["Month", "MONAT (E)", "Monat beenden (Taste E)", func(): _on_btn_end_month_pressed()],
+                                ["Help", "HILFE (H)", "Hilfe und Tastenkuerzel (Taste H)", func(): show_help()],
+                ]
+
+                for entry in actions:
+                                var btn = Button.new()
+                                btn.name = "Bar" + entry[0]
+                                btn.text = entry[1]
+                                btn.tooltip_text = entry[2]
+                                btn.custom_minimum_size = Vector2(118, 60)
+                                btn.add_theme_font_size_override("font_size", 14)
+                                btn.mouse_filter = Control.MOUSE_FILTER_STOP
+                                var handler: Callable = entry[3]
+                                btn.pressed.connect(handler)
+                                row.add_child(btn)
+                                if entry[0] == "Upgrade":
+                                                bar_upgrade_btn = btn
+                                elif entry[0] == "Month":
+                                                btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+
                 check_upgrade_status()
 
 func _show_loan_menu():
@@ -1225,14 +1300,20 @@ func _on_newspaper_menu_selected(id):
 
 # --- UPGRADES ---
 func check_upgrade_status():
+                var can_upgrade = false
+                var year_reached = false
+                if GameManager.era_manager:
+                                var upgrade_check = GameManager.era_manager.can_upgrade_era()
+                                can_upgrade = upgrade_check["can_upgrade"]
+                                year_reached = GameManager.era_manager.is_next_era_year_reached()
+
                 if btn_upgrade:
                                 # Use era_manager for upgrade check
                                 if GameManager.era_manager:
-                                                var upgrade_check = GameManager.era_manager.can_upgrade_era()
-                                                if upgrade_check["can_upgrade"]:
+                                                if can_upgrade:
                                                                 btn_upgrade.visible = true
                                                                 btn_upgrade.modulate = Color(0, 1, 0)  # Green - upgrade available
-                                                elif GameManager.era_manager.is_next_era_year_reached():
+                                                elif year_reached:
                                                                 # Jahr erreicht, aber Haupt-Upgrade/Module noch nicht komplett
                                                                 btn_upgrade.visible = true
                                                                 btn_upgrade.modulate = Color(1, 0.5, 0)  # Orange - Upgrade-Fortschritt noetig
@@ -1245,6 +1326,18 @@ func check_upgrade_status():
                                                                 btn_upgrade.modulate = Color(0, 1, 0)
                                                 else:
                                                                 btn_upgrade.visible = false
+
+                # Aktionsleiste: Upgrade-Button immer sichtbar, farbcodiert nach Status
+                if bar_upgrade_btn:
+                                if can_upgrade:
+                                                bar_upgrade_btn.modulate = Color(0.5, 1.0, 0.5)
+                                                bar_upgrade_btn.tooltip_text = "Aera-Wechsel jetzt moeglich!"
+                                elif year_reached:
+                                                bar_upgrade_btn.modulate = Color(1.0, 0.65, 0.3)
+                                                bar_upgrade_btn.tooltip_text = "Jahr erreicht - Haupt-Upgrade/Module fehlen noch"
+                                else:
+                                                bar_upgrade_btn.modulate = Color(0.75, 0.75, 0.75)
+                                                bar_upgrade_btn.tooltip_text = "Buerro-Upgrades und Aera-Wechsel"
 
 func _on_btn_upgrade_pressed():
                 # Mit Office-Upgrade-System: Panel mit Haupt-Upgrade + Modulen oeffnen

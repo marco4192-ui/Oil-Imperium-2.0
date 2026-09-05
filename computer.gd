@@ -105,11 +105,12 @@ var selected_facility_id = ""
 
 func _ready():
                                 _init_shader()
-                                
+
                                 # Handle navigation mode - MUST be before any menu setup
                                 _setup_initial_menu()
-                                
+
                                 apply_era_theme()
+                                _add_tiny_tank_button()
                                 connect_research_buttons()
                                 update_map_buttons()
                                 update_tank_buttons_visibility()
@@ -686,10 +687,13 @@ func update_sales_buttons_visibility():
                                                                                                                                 btn.visible = false
 
 func update_tank_buy_buttons():
+                                var cost_t = GameManager.get_tank_cost(250000)
                                 var cost_s = GameManager.get_tank_cost(500000)
                                 var cost_m = GameManager.get_tank_cost(1000000)
                                 var cost_l = GameManager.get_tank_cost(2500000)
 
+                                if btn_buy_tiny:
+                                                                btn_buy_tiny.text = "STARTER (250k bbl)\n$" + GameManager.format_cash(cost_t)
                                 if btn_buy_small:
                                                                 btn_buy_small.text = "KLEIN (500k bbl)\n$" + GameManager.format_cash(cost_s)
                                 if btn_buy_medium:
@@ -697,6 +701,23 @@ func update_tank_buy_buttons():
                                 if btn_buy_large:
                                                                 btn_buy_large.text = "GROSS (2.5M bbl)\n$" + GameManager.format_cash(cost_l)
 
+var btn_buy_tiny: Button = null
+
+func _add_tiny_tank_button():
+                                # Guenstige Starter-Stufe (250k bbl) programmatisch einfuegen,
+                                # damit der erste Tank frueh im Spiel bezahlbar ist.
+                                if btn_buy_small == null or btn_buy_small.get_parent() == null:
+                                                                return
+                                var parent = btn_buy_small.get_parent()
+                                btn_buy_tiny = Button.new()
+                                btn_buy_tiny.name = "BtnBuyTiny"
+                                btn_buy_tiny.custom_minimum_size = btn_buy_small.custom_minimum_size
+                                btn_buy_tiny.add_theme_font_size_override("font_size", btn_buy_small.get_theme_font_size("font_size"))
+                                btn_buy_tiny.pressed.connect(_on_btn_buy_tiny_pressed)
+                                parent.add_child(btn_buy_tiny)
+                                parent.move_child(btn_buy_tiny, btn_buy_small.get_index())
+
+func _on_btn_buy_tiny_pressed(): buy_tank(250000)
 func _on_btn_buy_small_pressed(): buy_tank(500000)
 func _on_btn_buy_medium_pressed(): buy_tank(1000000)
 func _on_btn_buy_large_pressed(): buy_tank(2500000)
@@ -728,6 +749,7 @@ func update_tank_view(r):
                                                                 btn_sell_tanks.disabled = (cap <= 0)
                                                                 btn_sell_tanks.text = "Tanks verkaufen" if cap > 0 else "Keine Tanks"
                                                                 
+                                if btn_buy_tiny: btn_buy_tiny.disabled = not is_unlocked
                                 if btn_buy_small: btn_buy_small.disabled = not is_unlocked
                                 if btn_buy_medium: btn_buy_medium.disabled = not is_unlocked
                                 if btn_buy_large: btn_buy_large.disabled = not is_unlocked

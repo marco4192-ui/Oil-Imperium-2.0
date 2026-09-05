@@ -401,20 +401,24 @@ func game_over(reason):
         timer.stop() # Timer anhalten
         FeedbackOverlay.show_msg(reason)
         time_label.modulate = Color(1, 0, 0)
-        await get_tree().create_timer(3).timeout
-        if has_node("/root/GameManager"): get_tree().change_scene_to_file("res://Office.tscn")
-        else: start_game()
+        # Fehlgeschlagener Verkauf: Region diesen Monat geschlossen, Öl bleibt im Tank
+        if has_node("/root/GameManager"):
+                GameManager.finalize_sale_fail()
+                await get_tree().create_timer(3).timeout
+                get_tree().change_scene_to_file(GameManager.pending_sale_return_scene)
+        else:
+                await get_tree().create_timer(3).timeout
+                start_game()
 
 func game_win():
         game_active = false
         timer.stop() # Timer anhalten
         FeedbackOverlay.show_msg("GESCHAFFT! GELD VERDIENT!")
         time_label.modulate = Color(0, 1, 0)
+        # Verkauf sauber verbuchen (nur die verkaufte Menge, Buchung + Statistik)
         if has_node("/root/GameManager"):
-                var val = GameManager.pending_sale_value
-                GameManager.cash += val
-                GameManager.oil_stored[GameManager.pending_sale_region] = 0
+                GameManager.finalize_sale_success()
                 await get_tree().create_timer(3).timeout
-                get_tree().change_scene_to_file("res://Office.tscn")
+                get_tree().change_scene_to_file(GameManager.pending_sale_return_scene)
         else:
                 await get_tree().create_timer(3).timeout; start_game()
