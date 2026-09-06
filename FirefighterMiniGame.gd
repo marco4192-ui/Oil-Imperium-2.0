@@ -425,8 +425,11 @@ func _end_game(success: bool, aborted: bool = false):
 		damage = clamp(avg + 10.0, 15.0, 60.0)
 		message_label.text = "ALLE BRÄNDE GELÖSCHT!\nGesamtschaden: %d%%" % int(damage)
 		message_label.modulate = Color(0.4, 1.0, 0.4)
-		if has_node("/root/GameManager") and get_node("/root/GameManager").sound_manager:
-			get_node("/root/GameManager").sound_manager.play_sound("achievement")
+		if has_node("/root/GameManager"):
+			var gm_ff = get_node("/root/GameManager")
+			gm_ff.fires_fought += 1
+			if gm_ff.sound_manager:
+				gm_ff.sound_manager.play_sound("achievement")
 	else:
 		if main.is_empty() or main.get("burning", true):
 			complete_failure = true

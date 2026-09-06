@@ -270,6 +270,15 @@ func create_claim_button(claim: Dictionary) -> Button:
                                                 btn.modulate = Color(0.024, 0.62, 1.0, 0.706)
                                 else: 
                                                 btn.modulate = Color(0.6, 0.6, 0.6, 0.706)
+
+                # WIRTSCHAFTSSPION (tech_market_intel): Zustand der KI-Felder aufdecken
+                if ai_owner != null and GameManager.tech_market_intel:
+                                if claim.get("drilled", false):
+                                                btn.tooltip_text += " | ÖLFELD AKTIV — in Produktion!"
+                                elif claim.has("ai_drill_progress"):
+                                                btn.tooltip_text += " | Bohrung der Konkurrenz: %d%%" % int(claim["ai_drill_progress"] * 100.0)
+                                else:
+                                                btn.tooltip_text += " | Noch nicht erschlossen."
                 
                 btn.pressed.connect(_on_claim_clicked.bind(c_id))
                 return btn
@@ -419,6 +428,7 @@ func _on_btn_action_pressed():
                                 if GameManager.cash >= price:
                                                 GameManager.cash -= price
                                                 claim["owned"] = true
+                                                GameManager.total_wells_bought += 1
                                                 GameManager.notify_update()
                                                 render_claims_grid(GameManager.current_viewing_region)
                                                 _on_claim_clicked(selected_claim_id) 

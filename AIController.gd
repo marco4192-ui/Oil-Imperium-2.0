@@ -207,6 +207,9 @@ func _process_projects(bot):
         var finished = []
         for project in bot["projects"]:
                 project["months_left"] -= 1
+                var claim = project["claim"]
+                if claim != null and typeof(claim) == TYPE_DICTIONARY:
+                        claim["ai_drill_progress"] = clampf(1.0 - float(project["months_left"]) / DRILL_MONTHS, 0.0, 1.0)
                 if project["months_left"] <= 0:
                         finished.append(project)
         for project in finished:
@@ -214,6 +217,7 @@ func _process_projects(bot):
                 var claim = project["claim"]
                 if claim != null and typeof(claim) == TYPE_DICTIONARY:
                         claim["drilled"] = true
+                        claim.erase("ai_drill_progress")
                 _log_ai(bot, game_manager.activity_feed.ACTIVITY_TYPE.AI_EXPANSION,
                         {"region": project.get("region", "?"), "info": "Ölfeld erschlossen"})
 
@@ -273,6 +277,7 @@ func _smart_expansion(bot):
                         {"region": best_region, "info": "Lizenz erworben"})
         best_claim["ai_owner"] = bot["name"]
         best_claim["region"] = best_region
+        best_claim["ai_drill_progress"] = 0.0
         bot["inventory"].append(best_claim)
         bot["cash"] -= drill_cost
         bot["projects"].append({"claim": best_claim, "region": best_region, "months_left": DRILL_MONTHS})

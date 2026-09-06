@@ -150,6 +150,18 @@ var ai_contracts_active: Array = []   # {id, bot_index, company, volume, price_p
 var ai_relations: Dictionary = {}     # bot_index -> 0.0..1.0
 var ai_contract_id_counter: int = 1
 
+# --- RUN-STATISTIK (Hall of Fame) ---
+var max_cash_ever: float = 0.0
+var total_wells_bought: int = 0
+var total_bbl_sold: float = 0.0
+var sabotages_suffered: int = 0
+var fires_fought: int = 0
+
+# --- EPOCHE 3: DIVERSIFIKATION & FUSION ---
+var fusion_started: bool = false
+var fusion_months_left: int = 0
+const FUSION_BUILD_MONTHS := 24
+
 signal game_ended(summary)
 
 const PIPELINE_NET_COSTS = {0: 2500000.0, 1: 6000000.0, 2: 15000000.0}
@@ -225,7 +237,8 @@ var office_data = {}
 var tech_level = 1; var current_era = 0; var global_drill_speed_modifier = 1.0 
 var era_upgrade_cost = {}; var era_colors = {}
 var researched_techs = []; var unlocked_techs = []   
-var tech_bonus_survey_accuracy = 0.0; var tech_bonus_production = 1.0; var tech_bonus_oil_price = 1.0       
+var tech_bonus_survey_accuracy = 0.0; var tech_bonus_production = 1.0; var tech_bonus_oil_price = 1.0
+var tech_market_intel = false
 var current_research_id = ""; var current_research_days_left = 0
 var tech_database = {}
 
@@ -770,6 +783,43 @@ func finish_month():
         monthly_refined_sold = 0.0
         monthly_sale_limit = get_current_sale_cap()
 
+        # Run-Statistik
+        max_cash_ever = max(max_cash_ever, cash)
+
+        # Wetter: Hurrikans bedrohen Offshore-Regionen (Juni bis November)
+        if date["month"] >= 6 and date["month"] <= 11 and randf() < 0.06:
+                var offshore_regions = []
+                for r_name in regions:
+                        if regions[r_name].get("unlocked", false) and regions[r_name].get("offshore_ratio", 0.0) >= 0.4 and regions[r_name].get("block_timer", 0) <= 0:
+                                offshore_regions.append(r_name)
+                if not offshore_regions.is_empty():
+                        var hit = offshore_regions.pick_random()
+                        regions[hit]["block_timer"] = randi_range(2, 4)
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("HURRIKAN!\n%s ist für %d Monate unpassierbar — keine Förderung!" % [hit, regions[hit]["block_timer"]], Color(0.4, 0.7, 1.0))
+                        if activity_feed:
+                                activity_feed.log_activity(activity_feed.ACTIVITY_TYPE.RANDOM_EVENT, {"info": "Hurrikan in " + hit})
+
+        # Epoche 3: Diversifikations-Einkommen
+        if facilities.get("solar_division", {}).get("built", false):
+                book_transaction("Global", 700000.0 * inflation_rate, "Solar-Diversifikation")
+        if facilities.get("lng_terminal", {}).get("built", false) and oil_price > 25.0:
+                book_transaction("Global", 1500000.0 * inflation_rate, "LNG-Terminal (Krisenprämie)")
+
+        # Fusionsprojekt: Countdown zum historischen Sieg
+        if fusion_started:
+                fusion_months_left -= 1
+                if fusion_months_left <= 0:
+                        fusion_started = false
+                        game_ended_emitted = true
+                        var victory_summary = _build_end_summary()
+                        victory_summary["victory"] = true
+                        game_ended.emit(victory_summary)
+                        save_game(current_save_slot)
+                        month_ended.emit({})
+                        notify_update()
+                        return
+
         # Hinweis: produzierende Region ohne Tank = kein Verkauf moeglich
         if not tank_hint_shown:
                 for r_name in regions:
@@ -887,6 +937,11 @@ func _build_end_summary() -> Dictionary:
                 "year": date["year"],
                 "company": company_name,
                 "player": player_name,
+                "max_cash": int(max_cash_ever),
+                "wells": total_wells_bought,
+                "sold_bbl": int(total_bbl_sold),
+                "sabotages": sabotages_suffered,
+                "fires": fires_fought,
         }
 
 # --- HELPER FUNCTIONS FÜR EXTERNE SIGNALE (CONTRACTS) ---
@@ -999,6 +1054,7 @@ func commit_sale(r, amount, _value, bypass_minigame: bool = false, refined: bool
         book_transaction(r, value, "Spot Sales")
         spot_sales_history[r] = true
         monthly_sold += amount
+        total_bbl_sold += amount
         if refined:
                 monthly_refined_sold += amount
         if has_node("/root/FeedbackOverlay"):
@@ -1117,6 +1173,7 @@ func finalize_sale_success():
                 book_transaction(r, val, "Spot Sales")
                 spot_sales_history[r] = true
                 monthly_sold += amt
+                total_bbl_sold += amt
                 if pending_sale_refined:
                         monthly_refined_sold += amt
                 if has_node("/root/FeedbackOverlay"):
@@ -1179,12 +1236,21 @@ func build_facility(fid):
                         get_node("/root/FeedbackOverlay").show_msg("PIPELINE-NETZ AUSGEBAUT: Stufe %d\n(+%d%% Preis, -%d%% Leitungsrisiko)" % [pipeline_network_level, pipeline_network_level * 2, pipeline_network_level * 15], Color.GREEN)
                 notify_update()
                 return
+        if fid in ["lng_terminal", "solar_division", "fusion_project"] and current_era < 3:
+                if has_node("/root/FeedbackOverlay"):
+                        get_node("/root/FeedbackOverlay").show_msg("Erst ab der 2000er-Ära verfügbar!", Color.ORANGE)
+                return
         var cost = facilities[fid]["cost"] * inflation_rate
         if cash >= cost:
                 facilities[fid]["built"] = true
                 book_transaction("Global", -cost, "Construction")
                 if fid == "refinery" and has_node("/root/FeedbackOverlay"):
                         get_node("/root/FeedbackOverlay").show_msg("RAFFINERIE FERTIG GESTELLT!\nRaffinierter Verkauf möglich (+40%% Preis, max. %s bbl/Monat)" % format_cash(REFINERY_MONTHLY_CAPACITY), Color.GREEN)
+                if fid == "fusion_project":
+                        fusion_started = true
+                        fusion_months_left = FUSION_BUILD_MONTHS
+                        if has_node("/root/FeedbackOverlay"):
+                                get_node("/root/FeedbackOverlay").show_msg("FUSIONSPROJEKT 'HELIOS' GESTARTET!\nNach %d Monaten Bauzeit erwartet dich historischer Ruhm!" % FUSION_BUILD_MONTHS, Color(1.0, 0.85, 0.3))
                 notify_update()
         else:
                 if has_node("/root/FeedbackOverlay"):
@@ -1238,6 +1304,8 @@ func player_order_sabotage(type, region):
 func ai_perform_sabotage(type, region):
         if sabotage_manager:
                 var res = sabotage_manager.execute_sabotage(self, type, region, false)
+                if res.success:
+                        sabotages_suffered += 1
                 if res.success or res.detected: trigger_phone_ring(res)
 
 func trigger_phone_ring(rep):
@@ -1598,7 +1666,14 @@ func save_game(slot_name: String = "1"):
                         "history_profit": history_profit,
                         "history_revenue": history_revenue,    # NEW: Full history
                         "history_expenses": history_expenses,  # NEW: Full history
-                        "history_oil_price": history_oil_price
+                        "history_oil_price": history_oil_price,
+                        "max_cash_ever": max_cash_ever,
+                        "total_wells_bought": total_wells_bought,
+                        "total_bbl_sold": total_bbl_sold,
+                        "sabotages_suffered": sabotages_suffered,
+                        "fires_fought": fires_fought,
+                        "fusion_started": fusion_started,
+                        "fusion_months_left": fusion_months_left
                 },
                 # New managers data (V5)
                 "managers": {
@@ -1705,6 +1780,13 @@ func load_game(slot_name: String = "1"):
                 history_revenue = data.stats.get("history_revenue", [])
                 history_expenses = data.stats.get("history_expenses", [])
                 history_oil_price = data.stats.get("history_oil_price", [])
+                max_cash_ever = data.stats.get("max_cash_ever", 0.0)
+                total_wells_bought = int(data.stats.get("total_wells_bought", 0))
+                total_bbl_sold = data.stats.get("total_bbl_sold", 0.0)
+                sabotages_suffered = int(data.stats.get("sabotages_suffered", 0))
+                fires_fought = int(data.stats.get("fires_fought", 0))
+                fusion_started = data.stats.get("fusion_started", false)
+                fusion_months_left = int(data.stats.get("fusion_months_left", 0))
 
                 # Ensure arrays are not empty to prevent graph issues
                 if history_cash.is_empty(): history_cash.append(cash)
@@ -1795,7 +1877,16 @@ func apply_tech_effect(effect_name):
                 "production_boost_small": tech_bonus_production = 1.10
                 "production_boost_medium": tech_bonus_production = 1.25
                 "production_boost_high": tech_bonus_production = 1.50
-                "safety_boost": pass 
+                "market_intel": tech_market_intel = true
+                "safety_boost": pass
+
+# --- WIRTSCHAFTSSPION (tech_market_intel) ---
+func get_ai_storage_in_region(region_name: String) -> float:
+        if not tech_market_intel or ai_controller == null: return -1.0
+        var total = 0.0
+        for bot in ai_controller.competitors:
+                total += bot.get("storage", {}).get(region_name, 0.0)
+        return total
 
 # --- CALCS ---
 func get_region_daily_production(region_name: String) -> float:
@@ -1809,6 +1900,9 @@ func get_region_daily_production(region_name: String) -> float:
                 if claim.get("is_empty", false): continue
                 if claim.get("owned", false) and claim.get("drilled", false) and claim.get("has_oil", false) and claim.get("reserves_remaining", 0) > 0:
                         total += claim["yield"]
+        # Winter drosselt die Offshore-Foerderung (Stuerme auf Nordsee & Co.)
+        if total > 0.0 and region.get("offshore_ratio", 0.0) >= 0.4 and (date["month"] == 12 or date["month"] <= 2):
+                total *= 0.75
         return total
 
 func calculate_drilling_costs(region_name: String, is_self: bool) -> Dictionary:

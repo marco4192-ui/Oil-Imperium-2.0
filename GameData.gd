@@ -43,7 +43,10 @@ const FACILITIES_TEMPLATE = {
         "workshop": { "name": "Ingenieurs-Werkstatt", "desc": "Pumpen & Sicherheit.", "cost": 600000, "maintenance": 120.0, "built": false },
         "test_site": { "name": "Belastungs-Testgelände", "desc": "Extreme Umweltbedingungen.", "cost": 1200000, "maintenance": 300.0, "built": false },
         "refinery": { "name": "Raffinerie", "desc": "Veredelt Rohöl zu Produkten: +40% Verkaufspreis, max. 300k bbl/Monat. Ab 1980er-Ära.", "cost": 8000000, "maintenance": 2500.0, "built": false },
-        "pipeline_net": { "name": "Pipeline-Netz", "desc": "3 Stufen: je +2% Preis und -15% Leitungsrisiko. Stufe 1 ab 1980ern, 2 ab 1990ern, 3 ab 2000ern.", "cost": 2500000, "maintenance": 800.0, "built": false }
+        "pipeline_net": { "name": "Pipeline-Netz", "desc": "3 Stufen: je +2% Preis und -15% Leitungsrisiko. Stufe 1 ab 1980ern, 2 ab 1990ern, 3 ab 2000ern.", "cost": 2500000, "maintenance": 800.0, "built": false },
+        "solar_division": { "name": "Solar-Division", "desc": "Unabhängiges Einkommen: +$700k/Monat, komplett unabhängig vom Ölpreis. Ab 2000er-Ära.", "cost": 80000000, "maintenance": 15000.0, "built": false },
+        "lng_terminal": { "name": "LNG-Terminal", "desc": "Verflüssigtes Gas für Asien: +$1,5M/Monat Krisenprämie, solange der Ölpreis über $25 liegt. Ab 2000er-Ära.", "cost": 120000000, "maintenance": 30000.0, "built": false },
+        "fusion_project": { "name": "Fusionsreaktor 'Helios'", "desc": "Das Megaprojekt: 24 Monate Bauzeit. Vollendet geht die Firma als Legende in die Geschichte ein (Sieg!). Ab 2000er-Ära.", "cost": 500000000, "maintenance": 100000.0, "built": false }
 }
 
 const TECH_DATABASE = {
@@ -194,6 +197,19 @@ const TECH_DATABASE = {
                 "req_tech": ["tech_esp_pumps"],
                 "min_era": 2,
                 "icon": "res://assets/icons/tech_fracking.png"
+        },
+        "tech_market_intel": {
+                "name": "Markt-Intelligenz",
+                "desc": "Wirtschaftsspionage: deckt Lagerbestaende und Bohrfortschritt der Konkurrenz auf.",
+                "research_cost": 400000,
+                "hardware_cost": 900000,
+                "research_time": 90,
+                "year": 1994,
+                "facility_req": "lab",
+                "effect": "market_intel",
+                "req_tech": [],
+                "min_era": 2,
+                "icon": "res://assets/icons/tech_satellite.png"
         }
 }
 

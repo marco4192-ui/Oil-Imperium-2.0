@@ -233,6 +233,17 @@ func _on_era_upgraded(_next_era: int):
                 load_office_style()
                 check_upgrade_status()
 
+func _fast_forward_week():
+                # Nicht Vorwärts spulen, wenn etwas auf Antwort wartet
+                if GameManager.phone_ringing:
+                                FeedbackOverlay.show_msg("Erst ans Telefon gehen!", Color.ORANGE)
+                                return
+                if GameManager.emergency_manager and not GameManager.emergency_manager.get_active_emergencies().is_empty():
+                                FeedbackOverlay.show_msg("Erst die Notfälle bearbeiten!", Color.ORANGE)
+                                return
+                GameManager.advance_time(7)
+                FeedbackOverlay.show_msg("Eine Woche vergangen.", Color.WHITE)
+
 # ==============================================================================
 # --- ENDAUSWERTUNG & HALL OF FAME (nach 30 Jahren) ---
 # ==============================================================================
@@ -268,9 +279,12 @@ func _on_game_ended(summary: Dictionary):
                 margin.add_child(vbox)
 
                 var title = Label.new()
-                title.text = "30 JAHRE OIL IMPERIUM — ENDABRECHNUNG"
+                if summary.get("victory", false):
+                                title.text = "HISTORISCHER SIEG!\nFUSIONSREAKTOR 'HELIOS' VOLLENDET"
+                else:
+                                title.text = "30 JAHRE OIL IMPERIUM — ENDABRECHNUNG"
                 title.add_theme_font_size_override("font_size", 28)
-                title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+                title.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5) if summary.get("victory", false) else Color(1.0, 0.85, 0.3))
                 title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
                 vbox.add_child(title)
 
@@ -289,6 +303,13 @@ func _on_game_ended(summary: Dictionary):
                                 summary.get("achievements", 0),
                                 ["1970er", "1980er", "1990er", "2000er"][clampi(summary.get("era", 0), 0, 3)],
                 ]
+                details.text += "\n\nHöchstes Vermögen: $%s | Felder: %d | Verkauft: %s bbl\nSabotagen erlitten: %d | Brände gelöscht: %d" % [
+                                GameManager.format_cash(summary.get("max_cash", 0)),
+                                summary.get("wells", 0),
+                                GameManager.format_cash(summary.get("sold_bbl", 0)),
+                                summary.get("sabotages", 0),
+                                summary.get("fires", 0),
+                ]
                 details.add_theme_font_size_override("font_size", 18)
                 details.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
                 vbox.add_child(details)
@@ -300,7 +321,14 @@ func _on_game_ended(summary: Dictionary):
                 vbox.add_child(hs_title)
 
                 var scores = _load_highscores()
-                scores.append({"company": summary.get("company", "?"), "score": summary.get("score", 0), "year": 2001})
+                var prev_best = 0
+                for e in scores:
+                                prev_best = max(prev_best, int(e.get("score", 0)))
+                scores.append({
+                                "company": summary.get("company", "?"), "score": summary.get("score", 0), "year": 2001,
+                                "era": summary.get("era", 0), "wells": summary.get("wells", 0),
+                                "victory": summary.get("victory", false),
+                })
                 scores.sort_custom(func(a, b): return a.get("score", 0) > b.get("score", 0))
                 if scores.size() > 10:
                                 scores.resize(10)
@@ -310,7 +338,10 @@ func _on_game_ended(summary: Dictionary):
                 var lines = ""
                 for i in range(scores.size()):
                                 var entry = scores[i]
-                                lines += "%2d. %-24s %14s\n" % [i + 1, entry.get("company", "?"), GameManager.format_cash(entry.get("score", 0))]
+                                var crown = " ★" if entry.get("victory", false) else ""
+                                lines += "%2d. %-24s %14s%s\n" % [i + 1, entry.get("company", "?"), GameManager.format_cash(entry.get("score", 0)), crown]
+                if prev_best > 0:
+                                lines += "\nBisheriger Rekord: $%s" % GameManager.format_cash(prev_best)
                 list.text = lines
                 list.add_theme_font_size_override("font_size", 16)
                 vbox.add_child(list)
@@ -333,6 +364,97 @@ func _on_game_ended(summary: Dictionary):
                 row.add_child(btn_new)
 
 const HIGHSCORE_PATH = "user://highscores.json"
+
+# ==============================================================================
+# --- SOUND-OPTIONEN ---
+# ==============================================================================
+func _show_sound_options():
+                var layer = CanvasLayer.new()
+                layer.name = "SoundOptionsLayer"
+                layer.layer = 90
+                add_child(layer)
+
+                var dim = ColorRect.new()
+                dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+                dim.color = Color(0, 0, 0, 0.6)
+                layer.add_child(dim)
+
+                var panel = Panel.new()
+                panel.custom_minimum_size = Vector2(520, 360)
+                panel.set_anchors_preset(Control.PRESET_CENTER)
+                panel.offset_left = -260; panel.offset_right = 260
+                panel.offset_top = -180; panel.offset_bottom = 180
+                layer.add_child(panel)
+
+                var margin = MarginContainer.new()
+                margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+                for m in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+                                margin.add_theme_constant_override(m, 24)
+                panel.add_child(margin)
+
+                var vbox = VBoxContainer.new()
+                vbox.add_theme_constant_override("separation", 14)
+                margin.add_child(vbox)
+
+                var title = Label.new()
+                title.text = "OPTIONEN — SOUND"
+                title.add_theme_font_size_override("font_size", 24)
+                title.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+                vbox.add_child(title)
+
+                var sm = GameManager.sound_manager
+                if sm == null:
+                                var err = Label.new()
+                                err.text = "Sound-System nicht verfügbar."
+                                vbox.add_child(err)
+                                return
+
+                _add_sound_slider(vbox, "GESAMTLAUTSTÄRKE", sm.master_volume, func(v): sm.set_master_volume(v))
+                _add_sound_slider(vbox, "EFFEKTE (SFX)", sm.sfx_volume, func(v): sm.set_sfx_volume(v))
+                _add_sound_slider(vbox, "UMGEBUNG (AMBIENT)", sm.ambient_volume, func(v): sm.set_ambient_volume(v))
+
+                var row = HBoxContainer.new()
+                row.add_theme_constant_override("separation", 16)
+                vbox.add_child(row)
+
+                var btn_toggle = Button.new()
+                btn_toggle.text = "SOUND: AN" if sm.sound_enabled else "SOUND: AUS"
+                btn_toggle.custom_minimum_size = Vector2(180, 44)
+                btn_toggle.pressed.connect(func():
+                                sm.toggle_sound(not sm.sound_enabled)
+                                btn_toggle.text = "SOUND: AN" if sm.sound_enabled else "SOUND: AUS"
+                )
+                row.add_child(btn_toggle)
+
+                var btn_test = Button.new()
+                btn_test.text = "TESTTON"
+                btn_test.custom_minimum_size = Vector2(140, 44)
+                btn_test.pressed.connect(func(): sm.play_sound("money_gain"))
+                row.add_child(btn_test)
+
+                var btn_close = Button.new()
+                btn_close.text = "SCHLIESSEN"
+                btn_close.custom_minimum_size = Vector2(140, 44)
+                btn_close.pressed.connect(func(): layer.queue_free())
+                row.add_child(btn_close)
+
+func _add_sound_slider(parent: VBoxContainer, label_text: String, initial: float, on_change: Callable):
+                var vbox = VBoxContainer.new()
+                parent.add_child(vbox)
+                var lbl = Label.new()
+                lbl.text = "%s: %d%%" % [label_text, int(round(initial * 100))]
+                vbox.add_child(lbl)
+                var slider = HSlider.new()
+                slider.min_value = 0.0
+                slider.max_value = 1.0
+                slider.step = 0.05
+                slider.value = initial
+                slider.custom_minimum_size = Vector2(0, 24)
+                slider.value_changed.connect(func(v):
+                                on_change.call(v)
+                                lbl.text = "%s: %d%%" % [label_text, int(round(v * 100))]
+                )
+                vbox.add_child(slider)
 
 func _load_highscores() -> Array:
                 if FileAccess.file_exists(HIGHSCORE_PATH):
@@ -392,6 +514,7 @@ func _build_action_bar():
                                 ["Loans", "KREDIT ($)", "Kreditzentrale (Taste $)", func(): _show_loan_menu()],
                                 ["Legal", "RECHT (R)", "Recht und Anwaelte: Verfahren, Bestechung, Compliance (Taste R)", func(): _show_legal_panel()],
                                 ["Month", "MONAT (E)", "Monat beenden (Taste E)", func(): _on_btn_end_month_pressed()],
+                                ["Week", "7 TAGE", "Sieben Tage überspringen (ruhige Woche)", func(): _fast_forward_week()],
                 ]
 
                 for entry in actions:
@@ -424,6 +547,7 @@ func _build_action_bar():
                 more_menu.add_item("ERFOLGE (A)", 4)
                 more_menu.add_item("LOG (L)", 5)
                 more_menu.add_item("HILFE (H)", 6)
+                more_menu.add_item("OPTIONEN", 7)
                 more_menu.id_pressed.connect(func(id):
                                 match id:
                                                 1: _on_btn_newspaper_pressed()
@@ -432,6 +556,7 @@ func _build_action_bar():
                                                 4: _show_achievements()
                                                 5: _show_activity_feed()
                                                 6: show_help()
+                                                7: _show_sound_options()
                 )
                 row.add_child(more_btn)
 

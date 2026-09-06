@@ -812,6 +812,10 @@ func _update_market_sale_ui():
                                                                 info += "  |  MARKTLIMIT: %s bbl (verkauft: %s)" % [GameManager.format_cash(limit), GameManager.format_cash(GameManager.monthly_sold)]
                                 else:
                                                                 info += "  |  MARKTLIMIT: keines"
+                                # Wirtschaftsspion: KI-Lagerbestand der Region aufdecken
+                                if current_sales_region != "" and GameManager.tech_market_intel:
+                                                                var ai_stored = GameManager.get_ai_storage_in_region(current_sales_region)
+                                                                info += "  |  KI-LAGER: %s bbl" % GameManager.format_cash(ai_stored)
                                 if has_refinery:
                                                                 info += "\nRAFFINERIE: %s / %s bbl verarbeitet" % [GameManager.format_cash(GameManager.monthly_refined_sold), GameManager.format_cash(GameManager.REFINERY_MONTHLY_CAPACITY)]
                                 market_info_label.text = info

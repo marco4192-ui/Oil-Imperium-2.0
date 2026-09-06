@@ -192,9 +192,25 @@ func _create_achievement_card(ach_data: Dictionary) -> PanelContainer:
         style.corner_radius_bottom_left = 8
         card.add_theme_stylebox_override("panel", style)
         
+        var hbox = HBoxContainer.new()
+        hbox.add_theme_constant_override("separation", 10)
+        card.add_child(hbox)
+
+        # Icon (generiertes Achievement-Symbol, sichtbar bei Freischaltung)
+        var icon_path = data.get("icon", "")
+        if icon_path != "" and ResourceLoader.exists(icon_path) and (unlocked or not is_hidden):
+                var icon = TextureRect.new()
+                icon.texture = load(icon_path)
+                icon.custom_minimum_size = Vector2(56, 56)
+                icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+                icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+                icon.modulate = Color.WHITE if unlocked else Color(0.35, 0.35, 0.35, 0.8)
+                hbox.add_child(icon)
+
         var vbox = VBoxContainer.new()
+        vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         vbox.add_theme_constant_override("separation", 5)
-        card.add_child(vbox)
+        hbox.add_child(vbox)
         
         # Title
         var title = Label.new()

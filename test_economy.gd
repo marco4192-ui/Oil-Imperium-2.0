@@ -223,6 +223,40 @@ func _init():
 	check(gm.get_ai_relation(0) < 0.55, "Ansehensverlust nach Bruch")
 	check(gm.get_ai_contracts_save_data().has("relations"), "KI-Verträge in Save-Daten")
 
+	print("--- EPOCHE 3 & WIRTSCHAFTSSPION ---")
+	gm.current_era = 0
+	gm.cash = 500000000
+	gm.build_facility("solar_division")
+	check(gm.facilities.get("solar_division", {}).get("built", false) == false, "Solar-Division erst ab 2000er-Ära")
+	gm.current_era = 3
+	gm.build_facility("solar_division")
+	check(gm.facilities.get("solar_division", {}).get("built", false) == true, "Solar-Division in Ära 3 baubar")
+	var cash_before_solar = gm.cash
+	gm.finish_month()
+	var solar_gain = gm.cash - cash_before_solar
+	check(solar_gain > 0.0, "Solar-Division erzielt Einkommen (+$%d im Monat)" % int(solar_gain))
+	check(gm.facilities.get("fusion_project", {}).get("built", false) == false, "Fusion noch nicht gebaut")
+	gm.cash = 2000000000
+	gm.build_facility("fusion_project")
+	check(gm.facilities.get("fusion_project", {}).get("built", false) == true, "Fusionsprojekt gestartet")
+	check(gm.fusion_started == true and gm.fusion_months_left == gm.FUSION_BUILD_MONTHS, "Fusion läuft (%d Monate übrig)" % gm.fusion_months_left)
+	gm.fusion_started = false
+	gm.facilities["fusion_project"]["built"] = false
+	gm.facilities["solar_division"]["built"] = false
+	gm.current_era = 0
+
+	check(gm.get_ai_storage_in_region("Texas") == -1.0, "Spion ohne Tech: keine Daten")
+	gm.tech_market_intel = true
+	check(gm.get_ai_storage_in_region("Texas") >= 0.0, "Spion mit Tech: KI-Lager sichtbar")
+	gm.tech_market_intel = false
+
+	print("--- RUN-STATISTIK ---")
+	gm.total_bbl_sold += 12345.0
+	gm.max_cash_ever = max(gm.max_cash_ever, gm.cash)
+	var stats_summary = gm._build_end_summary()
+	check(stats_summary.has("max_cash") and stats_summary.has("wells"), "Endsummary mit Run-Statistiken")
+	check(stats_summary.get("sold_bbl", 0) >= 12345, "Verkaufsmenge wird gezählt")
+
 	print("")
 	if failures == 0:
 		print("ALLE WIRTSCHAFTS-TESTS BESTANDEN")
